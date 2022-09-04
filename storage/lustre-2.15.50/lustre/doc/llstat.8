@@ -1,0 +1,44 @@
+.TH llstat 1 "Jul 7, 2008" Lustre "utilities"
+.SH NAME
+llstat \- print Lustre statistics
+.SH SYNOPSIS
+.B "llstat [-c] [-g] [-i interval] stats_file"
+.br
+.SH DESCRIPTION
+.B llstat
+can display statistics from any of several lustre stats files that
+share a common format, updated every \fIinterval\fR seconds.
+Use control-C to stop statistics printing.
+.TP
+.I "\-c"
+Clear the stats file first.
+.TP
+.I "\-i interval"
+Polling period in seconds.
+.TP
+.I "\-g"
+Graphable output format.
+.TP
+.I "\-h"
+Display help information.
+.TP
+.I "stats_file"
+Either the full path to a stats file, or the shorthand:
+\fImds\fR or \fIost\fR.
+.SH EXAMPLE
+To monitor the OST RPC stats every second:
+.IP
+llstat -i 1 ost
+.SH FILES
+.nf
+llite.*.stats
+lwp.*.stats
+mdc.*.stats
+obdfilter.*.stats
+osc.*.stats
+osd-ldiskfs.*.stats
+osp.*.stats
+ldlm.services.*.stats
+mds.MDS.*.stats
+ost.OSS.*.stats
+.fi

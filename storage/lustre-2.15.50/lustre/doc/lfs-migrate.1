@@ -1,0 +1,236 @@
+.TH LFS-MIGRATE 1 2021-11-08 "Lustre" "Lustre Utilities"
+.SH NAME
+lfs migrate \- migrate files or directories between MDTs or OSTs.
+.SH SYNOPSIS
+.B lfs migrate
+.RB [ -h "] [" -v ]
+.RI [ SETSTRIPE_OPTIONS " ... ]"
+.IR FILE " ..."
+.br
+.B lfs migrate -m \fISTART_MDT_INDEX
+.RB [ -cdHv ]
+.I DIRECTORY
+.br
+.SH DESCRIPTION
+Migrate OST objects between OSTs for the specified
+.IR FILE ,
+or recursively migrate
+.I DIRECTORY
+and all inodes/directories therein between MDTs.
+.SH OST MIGRATE OPTIONS
+.P
+The
+.B lfs migrate
+command can be used for moving files from one (or more) OSTs to other
+OSTs (e.g. for space balancing between OSTs, or to evacuate an OST for
+hardware reasons), to change the stripe count or other layout parameters
+of a file (e.g. to increase the bandwidth of a file by striping it over
+multiple OSTs), or to move the file between different classes of storage
+(e.g. SSD vs. HDD OSTs, or local vs. remote OSTs in different pools).
+.P
+In OST object migration mode, the command supports the same
+.I SETSTRIPE_OPTIONS
+listed in
+.BR lfs-setstripe (1)
+to specify the layout of the target file.  The migrate command differs from
+.B lfs setstripe
+in that
+.B lfs migrate
+will copy the data from the existing file(s) using the new layout parameters
+to the new OST(s). In contrast,
+.B lfs setstripe
+is used for creating new (empty) files with the specified layout.
+For OST object migration, there additional options available:
+.TP
+.BR -b , --block
+Block access to the file by other applications during data migration
+(default).  This prevents other processes from accessing the file during
+migration, which prevents data data writes to the old file objects from
+being lost.  This should be used if an OST needs to be completely emptied
+prior to its removal, to ensure all requested files are migrated off the
+OST.
+.TP
+.BR -h , --help
+Print usage message.
+.TP
+.BR -n , --non-block
+Abort migration if concurrent file access is detected.  This can be
+used with OST space balancing migration to avoid interfering with file
+access by applications if there is not a requirement to migrate any
+particular file to the new layout.
+.TP
+.BR -D , --non-direct
+Do
+.B not
+use
+.B O_DIRECT
+read and write operations when migrating a file.  The
+.B O_DIRECT
+option avoids data copy from kernel buffers into userspace, which can
+impose CPU and memory overhead on the copy operation, but makes read and
+write operations synchronous.  Using the
+.B --non-direct
+option uses buffered read/write operations, which may improve migration
+speed at the cost of more CPU and memory overhead.
+.br
+This option cannot be used on encrypted files when the encryption key is not
+available. It will result in
+.B
+-ENOKEY.
+.TP
+.BR -v , --verbose
+Print each filename as it is migrated.
+.P
+NOTE:
+.B lfs migrate
+has a complementary
+.B lfs_migrate
+script which is used to provide extra functionality when migrating file
+data between OSTs and has a separate man page.  See
+.BR lfs_migrate (1)
+for details.
+.SH MDT MIGRATE OPTIONS
+.TP
+.BR -m , --mdt-index=\fIMDT_INDEX [, \fIMDT_INDEX ,...]
+The specified
+.I DIRECTORY
+.B and all subdirectories and inodes
+will be migrated to the MDT with the specified
+.IR MDT_INDEX .
+This is useful if new MDTs have been added to a filesystem and existing user or
+project directories should be migrated off old MDTs to balance the space usage
+and future metadata workload. If
+.I MDT_INDEX
+is -1, the MDT index will be balanced by free space and inodes among
+available MDTs.  If multiple
+.I MDT_INDEX
+values are specified in a comma-seperated list, then all
+subdirectories will be
+.B striped
+across all of the specified MDT indices as if an equivalent
+.BI -c N
+option were given.
+.TP
+.BR -c , --mdt-count=\fICOUNT\fR
+All directories and subdirectories in the tree will be striped across
+.I COUNT
+MDTs, always using
+.I MDT_INDEX
+as the primary MDT for the directory.  If
+.I MDT_INDEX is
+.B -1
+then
+.I COUNT
+directory stripes will be chosen from MDTs proportional to the amount
+of free inodes and space on each MDT.  If multiple
+.I MDT_INDEX
+values are specified in a comma-separated list, then the number of specified
+.I MDT_INDEX
+values must match
+.IR COUNT .
+.TP
+.BR -d , --directory
+Only migrate the specified \fIDIRECTORY\fR and the non-directory inodes that are
+directly located within it.
+Similar to '\fBls -d\fR' and '\fBlfs getstripe -d\fR'.
+.TP
+.BR -H , --mdt-hash=\fIHASH_TYPE\fR
+Use
+.I HASH_TYPE
+for the new directory layout.
+.RS 1.2i
+.TP
+.B all_char (type 1)
+Sum of ASCII characters modulo number of MDTs. This
+provides weak hashing of the filename, and is suitable
+for only testing or when the input is known to have
+perfectly uniform distribution (e.g. sequential numbers).
+.TP
+.B fnv_1a_64 (type 2)
+Fowler-Noll-Vo (FNV-1a) hash algorithm.  This provides
+reasonably uniform, but not cryptographically strong,
+hashing of the filename. (default)
+.TP
+.B crush (type 3)
+CRUSH hash algorithm.  This is a consistent hash
+algorithm, so minimum sub files need to relocate
+during directory restripe.
+.RE
+.P
+.TP
+.B NOTE
+Only the root user can migrate directories.  Files that have been archived by
+HSM or are currently opened will fail to migrate, user can run the same migrate
+command again to finish migration when files are ready.  Both inode and
+directory entry will be migrated.  During migration directory and sub files can
+be accessed like normal ones, but the migration itself cannot be interrupted.
+.TP
+.B NOTE
+It is not currently possible to migrate files with an
+.B mdt
+component (Data-on-MDT, DoM).  If it is necessary to migrate such files off
+a particular MDT, they must first be migrated to have a non-DoM file layout
+and then the inodes migrated separately.  See
+.B EXAMPLES
+for details on how to migrate DoM files between MDTs.
+.TP
+.B WARNING
+Each migrated file or directory will have a new FID, and hence a new inode
+number.  As a consequence, files archived by Lustre HSM that depend on
+the FID as the identifier in the HSM archive cannot currently be migrated.
+Having a new inode number may also cause backup tools to consider the
+migrated file(s) to be a new, and cause them to be backed up again.
+.P
+.SH EXAMPLES
+.TP
+.B $ lfs migrate -c 2 /mnt/lustre/file1
+This migrates the data in
+.B file1
+into a new layout with 2 stripes.
+.TP
+.B $ lfs migrate -E 256M -c 1 -E 16G -c 4 -E eof -c 40 /mnt/lustre/file2
+.br
+This migrates the data in
+.B file2
+into a three component composite layout (number of stripes depends on
+file size).
+.TP
+.B # lfs migrate -m 0,2 testremote
+.br
+Recursively move the subdirectories and inodes contained in directory
+.B remotedir
+from its current MDT to MDT0000 and MDT0002.  The
+.B testremote
+directory and all of its subdirectories will be striped across both MDTs.
+.TP
+.B $ lfs migrate -m 0,2 -d ./testremote
+Move ./testremote and the first level of sub files from their current MDT
+to the MDT with index 0 and 2. Different from above case, the layout of
+subdirectories under ./testremote won't be changed.
+.TP
+.B # lfs setstripe -E 256M -c 1 -E 16G -c 4 -E eof -c 40 topdir
+Set a default PFL layout (without any DoM component) on the directory
+.BR topdir ,
+.TP
+.B # lfs find dir -type f -L mdt -0 | xargs -0 lfs migrate --copy topdir
+then find and migrate all regular files that have an
+.B mdt
+component to copy the default layout from the specified
+.BR topdir ,
+.TP
+.B # lfs migrate -m 2 topdir
+.br
+and finally migrate the directory
+.B topdir
+and all files and subdirectories in that tree to MDT0002.  This allows
+migrating files with DoM components off an MDT.
+.SH AUTHOR
+The lfs command is part of the Lustre filesystem.
+.SH SEE ALSO
+.BR lfs (1),
+.BR lfs-setstripe (1),
+.BR lfs-setdirstripe (1),
+.BR lfs-getdirstripe (1),
+.BR lfs-mkdir (1),
+.BR lfs_migrate (1),
+.BR lctl (8),

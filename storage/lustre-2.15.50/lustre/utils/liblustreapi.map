@@ -1,0 +1,14 @@
+{
+    global:
+	cfs_*;
+	llapi_*;
+	libcfs_*;
+	liblustreapi_initialized;
+	l_ioctl;
+	mdt_hash_name;
+	lu_foreign_types;
+	Parser_*;
+	register_ioc_*;
+    local:
+	*;
+};

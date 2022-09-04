@@ -1,0 +1,100 @@
+#!/bin/bash
+
+LUSTRE=${LUSTRE:-$(cd $(dirname $0)/..; echo $PWD)}
+. $LUSTRE/tests/test-framework.sh
+
+usage() {
+    echo "-C use chroot instead of cd"
+    echo "-D DIR - use 'DIR' as work directory"
+    echo
+    exit;
+}
+
+PATH=${DBENCH_LIB}:${PATH}
+MOUNT=${MOUNT:-/mnt/lustre}
+DIR=${DIR:-$MOUNT/`hostname`}
+
+PREFIX="on"
+while getopts "CD:" opt $*; do
+	case $opt in
+		D) [ -d $OPTARG ] && DIR=$OPTARG ;;
+		C) CHROOT="yes" ;;
+		\?) usage ;;
+	esac
+done
+
+mkdir -p $DIR
+TGT=$DIR/client.txt
+CLIENT_PREFIX="${DBENCH_LIB} /usr/share/dbench /usr/local/share /usr/lib/dbench"
+CLIENT_FILE="client.txt client_plain.txt dbench_client"
+if ! which dbench > /dev/null 2>&1 ; then
+    [ "$MISSING_DBENCH_OK" ] || { error "$0 : $(hostname) dbench is not installed !" && exit 3; }
+    skip_env "$0 : $(hostname) dbench is not installed"
+    exit 0
+fi
+CLIENT=""
+
+for prefix in $CLIENT_PREFIX; do
+	for file in $CLIENT_FILE; do
+		if [ -s "${prefix}/${file}" ]; then
+			CLIENT="${prefix}/${file}";
+			break;
+		fi
+	done
+	[ "x$CLIENT" != "x" ] && break;
+done
+
+if [ -n "$DBENCH_SRC" -a -s "$DBENCH_SRC" ]; then
+    CLIENT=$DBENCH_SRC
+fi
+
+[ ! -s "$CLIENT" ] &&
+    skip_env "$0: no client file found for dbench on $(hostname): "\
+             "DBENCH_LIB=$DBENCH_LIB DBENCH_SRC=$DBENCH_SRC" && exit 0
+
+[ ! -s "$TGT" ] && echo "copying $CLIENT to $TGT" && cp $CLIENT $TGT
+[ ! -s "$TGT" ] && \
+    echo "$0 : $(hostname) $TGT file doesn't exist after cp $CLIENT $TGT" && exit 1
+
+if [ "x$CHROOT" == "xyes" ]; then
+	echo "copying necessary libs to $DIR"
+	cp `which dbench` $DIR
+	LIBS71=$(ldd $DIR/dbench |
+		sed -e 's/\t*//' -e 's/.*=> //' -e 's/ .*//' -e 's/^\///' |
+		grep -v 'linux-vdso.so.1')
+	tar -C / -chf - $LIBS71 | tar -C $DIR -xvf -
+	if [ "${PIPESTATUS[*]}" != "0 0" ]; then
+		echo "can't copy libs $LIBS71 to $DIR"
+		rm -f $DIR/dbench
+		exit 1
+	fi
+	RUN="chroot $DIR"
+	PREFIX="in"
+	PATH=.:/:$PATH
+fi
+
+shift $((OPTIND - 1))
+
+trap '
+echo kill dbench main pid=$DBENCHPID
+kill $DBENCHPID
+rm -rf dbench $LIBS71 client.txt
+exit 0
+' TERM
+
+# turn off errexit. rundbench will return error code on failure
+trap '' ERR
+set +e
+
+cd $DIR
+echo "running 'dbench $@' $PREFIX $PWD at `date`"
+
+$RUN dbench -c client.txt $@ &
+DBENCHPID=$!
+echo "dbench PID=$DBENCHPID"
+wait $DBENCHPID
+RC=$?
+[ $RC -ne 0 ] && killall -9 dbench
+
+rm -rf dbench $LIBS71 client.txt
+exit $RC

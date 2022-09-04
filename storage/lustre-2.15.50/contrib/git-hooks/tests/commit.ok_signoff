@@ -1,0 +1,14 @@
+LU-553 build: improve checks for commit-msg
+
+message
+body
+
+Signed-off-by: Andreas Dilger <adilger@whamcloud.com>
+Signed-off-by: Andreas Eric Dilger <adilger@dilger.ca>
+Signed-off-by: Andreas Eric Dilger <andreas.dilger@mail.my-domain.za>
+Signed-off-by: Andreas Smyth Esq. III <asmyth_iii@my-domain-3.co.uk>
+Change-Id: I0123456789012345678901234567890123456789
+
+# total: 0 errors, 0 warnings, 36 lines checked
+#
+# Your patch has no obvious style problems and is ready for submission.

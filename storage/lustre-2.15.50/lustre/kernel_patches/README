@@ -1,0 +1,4 @@
+The Linux kernel patches for Lustre.  See the Lustre file system Operations
+Manual 2.x from http://lustre.opensfs.org/documentation/ for information on how
+to patch your kernel.
+

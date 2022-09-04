@@ -1,0 +1,184 @@
+.TH lgss_sk 8 "2016 Jan 12" Lustre "configuration utilities"
+.SH NAME
+lgss_sk \- Lustre GSS Shared-Key tool
+.SH SYNOPSIS
+.B "lgss_sk [OPTIONS] {-r|-w|-m|-l} <keyfile>"
+.br
+.SH DESCRIPTION
+.B lgss_sk
+can be used to read, write, modify, and load the contents of a shared-key keyfile.
+.SH OPTIONS
+.B lgss_sk
+accepts the following options:
+.TP
+.I "-l, --load <keyfile>"
+Load key from file into user's session keyring.
+.TP
+.I "-m, --modify <keyfile>"
+Modify a file's key attributes.
+.TP
+.I "-r, --read <keyfile>"
+Show file's key attributes.
+.TP
+.I "-w, --write <keyfile>"
+Generate key file.
+.HP
+Modify/Write Options:
+.TP
+.I "-c, --crypt <num>"
+Cipher for encryption (Default: AES-256-CTR)
+.RS
+AES-256-CTR
+.RE
+.TP
+.I "-i, --hmac <num>"
+Hash algorithm for integrity (Default: SHA256)
+.RS
+SHA256
+.br
+SHA512
+.RE
+.TP
+.I "-e, --expire <num>"
+Seconds before session contexts generated from key expire and are regenerated
+(Default: 604800 seconds (7 days)).
+.TP
+.I "-f, --fsname <name>"
+File system name for key.
+.TP
+.I "-g, --mgsnids <nids>"
+Comma seperated list of MGS NIDs.  Only required when mgssec is used (Default: "").
+.TP
+.I "-n, --nodemap <name>"
+Nodemap name for key (Default: "default").
+.TP
+.I "-p, --prime-bits <len>"
+Length of prime (p) in bits used for the DHKE (Default: 2048).  This is
+generated only for client keys and can take a while to generate.  For server
+and MGS keys this value also sets the minimum acceptable prime length from a
+client.  If a client attempts to connect with a smaller prime it will reject
+the connection.  In this way servers can "guarantee" the minimum encryption
+level acceptable.
+.TP
+.I "-t, --type <type>"
+The type is a mandatory parameter for writing a key and optional for modifying.
+Valid key types:
+.nf
+mgs    - is used for the MGS where --mgssec is used
+server - for MDS or OSS servers
+client - For clients as well as servers who communicate with other servers in a
+         client context (e.g. MDS communication with OSTs)
+.fi
+.TP
+.I "-k, --shared <len>"
+Shared key length in bits (Default: 256).
+.TP
+.I "-d, --data <file>"
+Shared key entopy data source (default: /dev/random).  It is possible to
+use /dev/urandom for testing, but this may provide less security in some
+cases.  You may need to press keys on the keyboard or move the mouse
+(if directly attached to the system) or cause disk IO (if system is remote),
+in order to generate entropy for the key if there is not a hardware random
+number generator on the system.
+.HP
+Other Options:
+.TP
+.I "-v, --verbose"
+Increase verbosity for errors.
+.SH NOTES
+The key file is generally the same for client and servers with a few exceptions:
+.IP
+.nf
+1. Types can differ
+2. Both have the prime length but only client keys will have the actual prime
+   value populated.
+.fi
+.LP
+Therefore a
+.B server
+or
+.B mgs
+key can be distributed to a client but the clients
+must change the type to generate a prime.
+.HP
+.SH EXAMPLES
+Create a key for file system
+.B tank
+for nodemap
+.B biology
+with type server.
+Once on the client the file should be modified to reflect that it is of type
+.B client
+and will also generate a prime for the key.
+.IP
+.nf
+[root@server ~]# lgss_sk -f tank -n biology -t server -w tank.server.biology.key
+[root@server ~]# scp tank.server.biology.key user@client:tank.client.biology.key
+
+[root@client ~]# lgss_sk -t client -m tank.client.biology.key
+.fi
+.LP
+Add MGS NIDs to existing key:
+.IP
+.nf
+[root@server ~]# lgss_sk -g 192.168.1.101@tcp,10.10.0.101@o2ib \\
+-m tank.server.biology.key
+
+[root@client ~]# lgss_sk -g 192.168.1.101@tcp,10.10.0.101@o2ib \\
+-m tank.client.biology.key
+.fi
+.LP
+Show key attributes:
+.IP
+.nf
+[root@server ~]# lgss_sk -r tank.server.biology.key
+Version:        1
+Type:           server
+HMAC alg:       SHA256
+Crypto alg:     AES-256-CTR
+Ctx Expiration: 604800 seconds
+Shared keylen:  256 bits
+Prime length:   2048 bits
+File system:    tank
+MGS NIDs:       192.168.1.101@tcp 10.10.0.101@o2ib
+Nodemap name:   biology
+Shared key:
+  0000: c160 00c6 e5ba 11df 50cb c420 ae61 c1b3  .`......P.. .a..
+  0010: c76e 5a82 ce48 fde9 d319 ce26 cfc4 b91e  .nZ..H.....&....
+
+[root@client ~]# lgss_sk -r tank.client.biology.key
+Version:        1
+Type:           client
+HMAC alg:       SHA256
+Crypto alg:     AES-256-CTR
+Ctx Expiration: 604800 seconds
+Shared keylen:  256 bits
+Prime length:   2048 bits
+File system:    tank
+MGS NIDs:       192.168.1.101@tcp 10.10.0.101@o2ib
+Nodemap name:   biology
+Shared key:
+  0000: c160 00c6 e5ba 11df 50cb c420 ae61 c1b3  .`......P.. .a..
+  0010: c76e 5a82 ce48 fde9 d319 ce26 cfc4 b91e  .nZ..H.....&....
+Prime (p) :
+  0000: be19 9412 a4c5 3355 9963 ebdf 3fce a5d8  ......3U.c..?...
+  0010: 9776 50db 70b1 1ad4 a22b 3b68 2ae6 fb7a  .vP.p....+;h*..z
+  0020: 803b 2f67 e6ee cd55 3df1 afbd 4e3a b620  .;/g...U=...N:. 
+  0030: 1d86 4182 bb03 d9b5 9605 658e 4dfb 6d39  ..A.......e.M.m9
+  0040: 0394 b789 437f d30b 3fc0 2c7f 42bb 1987  ....C...?.,.B...
+  0050: 0837 bae1 5332 4992 3a0c 9d01 d350 c2bb  .7..S2I.:....P..
+  0060: ed25 27e9 5439 f295 4c04 08cd bcfe 7e0b  .%'.T9..L.....~.
+  0070: 542b e80b 2fb5 eed0 9ca8 f9bc a792 baf1  T+../...........
+  0080: db1a af08 cee7 7b7f f3e4 7f14 71ca b7c9  ......{.....q...
+  0090: 9d07 c24b 8f04 65e3 4c8c fdd5 6e70 641d  ...K..e.L...npd.
+  00a0: af24 a48a b1c7 d2ff 9fee 158e 7025 6d81  .$..........p%m.
+  00b0: a54f 48f9 712f cac3 28fb 426c 330b 07ff  .OH.q/..(.Bl3...
+  00c0: c4a4 cb67 a46b cc57 1846 dc9d 4ce4 fa65  ...g.k.W.F..L..e
+  00d0: 7fc6 e77d 1220 b807 6c7c 5660 b703 39d2  ...}. ..l|V`..9.
+  00e0: 1d99 bd89 e2f1 3e40 74a1 709c 6e6c 6624  ......>@t.p.nlf$
+  00f0: fad6 97bf c3e0 b0d4 cefc 3596 dd69 5223  ..........5..iR#
+
+.fi
+.br
+.SH "SEE ALSO"
+.BR nids (5)

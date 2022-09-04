@@ -1,0 +1,81 @@
+Here is an short explanation what to install on your Servers to set up
+Lustre quickly.  Be aware that this doesn't replace the Documentation
+and Installation Howtos from Lustre.
+
+
+#1. Building the kernel and the modules
+    You've to download the linux-source package for your kernel and
+    the linux-patch-lustre package.
+
+    Then patch your kernel with the correct patch file. Build and install
+    it.  (Use make-kpkg) To patch the kernel automatically use
+    --added-patches=lustre as build option.
+
+    Here is the full line how I build my kernel (for those who are not
+    familiar with make-kpkg):
+    make-kpkg --added-patches=lustre --initrd --append-to-version "-my-version" --revision 1 kernel_image
+
+    Now reboot into this new kernel and install the Lustre modules with:
+     - m-a auto-install lustre
+
+    Then the kernel and the modules should be there.
+
+#2. Preparing the system
+    In the next step install:
+     - lustre-server-utils or lustre-client-utils
+
+    This have to be done on every server system.
+
+#3. Creating partitions on the OST/MDT/MGS Servers
+    Now you'll have to differentiate between the OST and MDT and MGS Systems
+    We'll assume here that MDT and MGS are on the same system:
+
+     - Create partitions:
+        - MGS/MDT: mkfs.lustre --fsname spfs --mdt --mgs $device
+        - OST: mkfs.lustre --fsname spfs --ost --mgsnode=$mgsnode@tcp0 $device
+
+        Additional options are:
+	    --reformat                       - this partition was previously formatted with lustre, reformat it
+	    --param="failover.mode=failout"  - don't hang the entire fs if an ost isn't available.
+
+     - Now mount the partitons on the servers:
+        - first the MDT/MGS Server:
+          - mount -t lustre /dev/sda /srv/mdt
+        - now the OST's
+          - mount -t lustre /dev/sda /srv/ost
+
+
+#4. Using the filesystem
+    In order to use the FS, you'll have to mount it on a client. Please note
+    that this client also needs the lustre-modules to be installed. (You can
+    install lustre-source and build the module as described in 1.)
+     - mount -t lustre mgsnode@tcp0:/spfs /mnt
+
+#5. Building client modules with DKMS
+
+    Lustre client-only kernel modules can built against non-patched, vanilla
+	kernels. This may be more convenient than installing the patched kernel
+	and server modules.
+
+    Installing the lustre-client-modules-dkms package will automatically
+	build modules for all currently installed kernels using DKMS
+	(http://linux.dell.com/dkms/) for which you will need to have the relevant
+	linux-headers packages installed. When a new kernel is installed on the
+	machine, DKMS will automatically build a new set of Lustre client modules.
+
+    You can also use DKMS to create a new deb containing the pre-built kernel
+	modules, suitable for installing on other machines which may not have a
+	full build environment.
+
+    - dkms build -m lustre-client-modules -v <version> -k <kernel-version>
+      (repeat the above step for all required kernel versions)
+    - dkms mkdeb -m lustre-client-modules -v <version>
+    - dkms mkdsc -m lustre-client-modules -v <version>
+
+
+###########
+Please have also a look into the official documentation for Lustre available at:
+
+https://wiki.whamcloud.com/display/PUB/Documentation
+
+ -- Patrick Winnertz <winnie@debian.org>  Thu, 28 Dec 2007 14:53:25 +0200

@@ -1,0 +1,150 @@
+<!-- doc/src/sgml/encryption.sgml -->
+
+<chapter id="encryption">
+ <title>Transparent Data Encryption</title>
+
+ <para>
+  Cluster encryption can be used if the <acronym>DBA</acronym> cannot or does not
+  want to rely on the filesystem in terms of data confidentiality. If this
+  feature is enabled, <productname>PostgreSQL</productname> encrypts data
+  (both relations and write-ahead log) when writing it to disk, and decrypts
+  it when reading it. The encryption is transparent, so applications see no
+  difference between encrypted and unencrypted clusters.
+ </para>
+
+ <para>
+  If you want to use this feature, please make sure
+  that <productname>OpenSSL</productname> is installed on your server and that
+  support in <productname>PostgreSQL</productname> is enabled at build time
+  (see <xref linkend="installation"/>).
+ </para>
+
+ <para>
+  To create an encrypted cluster, call <xref linkend="app-initdb"/> with the
+  option <option>-K</option> and the path to the command that will retrieve
+  the encryption key. For example:
+<screen>
+<prompt>$</prompt> <userinput>initdb -D /usr/local/pgsql/data -K /usr/local/pgsql/fetch_key_cmd</userinput>
+</screen>
+  Here <filename>/usr/local/pgsql/fetch_key_cmd</filename> is an executable
+  file that writes the encryption key to its standard output and returns
+  zero.
+ </para>
+
+ <para>
+   The encryption key is expected in hexadecimal format, two characters
+   (hexadecimal digits) per byte. For the default key length of 128 bits (16
+   bytes), the expected length of the key string is 32 characters. For
+   example:
+   <computeroutput>
+     882fb7c12e80280fd664c69d2d636913
+   </computeroutput>
+   Likewise, for the key lengths <literal>192</literal> and
+<literal>256</literal> bits, the key string length should
+   be <literal>48</literal> and <literal>64</literal> characters respectively.
+ </para>
+
+ <para>
+   <application>initdb</application> eventually puts the encryption key
+   command into the <filename>postgresql.conf</filename> file, as the value
+   of the <literal>encryption_key_command</literal> parameter. That ensures that
+   you don't need to pass it to <application>pg_ctl</application> each time
+   you want to start the server.
+ </para>
+
+ <para>
+   If you want to enter a password, you can use the
+   <xref linkend="app-pg-keytool"/> utility to derive an encryption key from
+   it. For example, if the <option>-K</option> option looks like the
+   following example, the DBA will be asked for a password interactively:
+
+<screen>
+<prompt>$</prompt> <userinput>initdb -K '(read -sp "Cluster encryption password: " PGENCRPWD; echo $PGENCRPWD | pg_keytool -D %D -w)' -D data
+</userinput>
+</screen>
+
+ </para>
+
+ <note id="encryption_kdf_file">
+  <title>kdf_params file</title>
+  <para>
+    If the cluster should be encrypted, <application>initdb</application>
+    creates <filename>global/kdf_params</filename> file in the data
+    directory. This file contains parameters of
+    the <ulink url="https://en.wikipedia.org/wiki/Key_derivation_function">key
+    derivation function</ulink> (<acronym>KDF</acronym>) and is needed to
+    derive the encryption key from a password. Currently the only
+    supported <acronym>KDF</acronym>
+    is <ulink url="https://en.wikipedia.org/wiki/PBKDF2">PBKDF2</ulink>, so
+    the parameters stored in the file are: 1) number of iterations and 2)
+    salt. Since the salt is data directory specific, a different key will be
+    derived from the same password for different data directories.
+  </para>
+
+  <para>
+   The <filename>kdf_params</filename> file contents is not secret, but if it
+   gets lost, you can no longer derive the encryption key from the
+   password. However but you can still use the encryption key if you have it
+   stored somewhere.
+  </para>
+ </note>
+
+ <para>
+   As long as <application>pg_keytool</application> is called
+   by <application>initdb</application>, you can put <literal>%D</literal>
+   into the command and
+   <application>initdb</application> will replace it with the actual directory
+   path. Note, however, that only the actual value of the <option>-K</option>
+   option is subject to this replacement. No replacement will take place
+   if <application>pg_keytool</application> is called from a shell script
+   whose path is passed to <application>initdb</application> via
+   the <option>-K</option> option. In such a case, it may be easier to pass the
+   data directory to
+   <application>pg_keytool</application> via the <envar>PGDATA</envar> environment
+   variable.
+ </para>
+
+ <para>
+   If the <literal>encryption_key_command</literal> setting is not present
+   in <filename>postgresql.conf</filename>, the command can be passed to
+   <xref linkend="app-pg-ctl"/> when starting the cluster:
+
+<screen>
+<prompt>$</prompt> <userinput>pg_ctl -K '(read -sp "Cluster encryption password: " PGENCRPWD; echo $PGENCRPWD | pg_keytool -D %D -w)' -D data start
+</userinput>
+</screen>
+ </para>
+
+ <note>
+   <para>
+     You need to use the <option>-K</option> option if the encryption key
+     command needs to read the password from the console, like it does in the
+     example above. In such a case, please comment out
+     the <literal>encryption_key_command</literal> parameter
+     in <filename>postgresql.conf</filename>.
+   </para>
+ </note>
+
+ <para>
+  Once the <productname>PostgreSQL</productname> server is running, client
+  applications should recognize no difference to an unencrypted cluster,
+  except that the <xref linkend="guc-data-encryption"/> variable is set.
+ </para>
+
+ <para>
+  Since WAL is encrypted, any replication solution based on log shipping
+  (<xref linkend="warm-standby"/>) assumes that all standby servers are
+  encrypted using the same key as their primary server. On the other hand,
+  logical replication (see <xref linkend="logical-replication"/>) allows
+  replication between encrypted and unencrypted clusters, or between clusters
+  encrypted with different keys.
+ </para>
+
+ <note>
+  <para>
+   Key rotation is currently not supported. If you need it, you can use the key
+   management system of your choice and rotate the corresponding key encryption
+   key (KEK) instead.
+  </para>
+ </note>
+</chapter>

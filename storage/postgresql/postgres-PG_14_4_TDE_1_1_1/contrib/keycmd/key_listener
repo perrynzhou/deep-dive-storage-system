@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""A key management server: just wait to the key and outputs it to stdout. This
+is needed by CYBERTEX's PostgreSQL TDE implementation.
+
+Generate certificates with:
+
+    openssl req -x509 -newkey rsa:2048 -keyout selfsigned.key -nodes \
+        -out selfsigned.cert -sha256 -days 1000
+
+See the official `documentation`_ if need be. Note that the `test with SSL`_
+might be really useful when we do tests.
+
+.. _documentation: https://docs.python.org/3/library/asyncio.html
+.. _test with SSL: https://aliceh75.github.io/testing-asyncio-with-ssl
+"""
+
+import argparse
+import asyncio
+import logging
+import os.path
+import ssl
+import sys
+from pathlib import Path
+
+
+class KeyListenerProtocol(asyncio.Protocol):
+    """The key server, waits for something to give it a key."""
+
+    def __init__(self, on_con_lost):
+        self._logger = logging.getLogger(self.__class__.__name__)
+        self.transport = None
+        self.on_con_lost = on_con_lost
+        self._logger.info("Initialised.")
+
+    def connection_made(self, transport):
+        """Called when a connection is made.
+
+        The transport argument is the transport representing the
+        connection. The protocol is responsible for storing the
+        reference to its transport.
+        """
+        peername = transport.get_extra_info("peername")
+        self._logger.info("Connection from {}.".format(peername))
+        self.transport = transport
+
+    def data_received(self, data):
+        """Called when some data is received. data is a non-empty bytes object
+        containing the incoming data.
+
+        Whether the data is buffered, chunked or reassembled depends on the
+        transport. In general, you shouldn’t rely on specific semantics and
+        instead make your parsing generic and flexible. However, data is
+        always received in the correct order.
+
+        The method can be called an arbitrary number of times while a
+        connection is open.
+
+        However, protocol.eof_received() is called at most once. Once
+        eof_received() is called, data_received() is not called anymore.
+        """
+        message = data.decode()
+        # self._logger.info("Data received: {!r}.".format(message))
+        print("{}".format(message), flush=True)
+
+        self._logger.info("Acknowledge the client's message.")
+        self.transport.write(b"Merci et au revoire!")
+
+        self._logger.info("Close the client socket.")
+        self.transport.close()
+
+        self._logger.info("Close the server socket.")
+        self.on_con_lost.set_result(True)
+
+
+def get_certificates_location():
+    """Returns the top level path to the certificates based on where the code
+    thinks it is running."""
+    if cert_dir:
+        cert_path = Path(cert_dir)
+    if cert_dir and cert_path.exists() and cert_path.is_dir():
+        # This is in the docker image.
+        return cert_path
+    else:
+        test_path = Path.cwd().joinpath("certs")
+        if test_path.exists() and test_path.is_dir():
+            # This is testing in db-tde.
+            return test_path
+        else:
+            # We give up!
+            raise IOError("No idea where to find certificates!")
+
+
+async def main():
+    """Does the hard work so you do not have to."""
+
+    # Logging.
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.DEBUG,
+    )
+    logger = logging.getLogger("main")
+    logger.info("Started")
+
+    # Get a reference to the event loop as we plan to use low-level APIs.
+    loop = asyncio.get_running_loop()
+    on_con_lost = loop.create_future()
+
+    # SSL.
+    server = None
+    try:
+        certs = get_certificates_location()
+        sc = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        sc.load_cert_chain(
+            certs.joinpath(cert_file), certs.joinpath(key_file)
+        )
+
+        server = await loop.create_server(
+            lambda: KeyListenerProtocol(on_con_lost), host, port, ssl=sc
+        )
+
+        logger.info("Waiting for input… ")
+        await on_con_lost
+        return 0
+    except IOError as err:
+        logger.exception(err)
+        logger.fatal(err)
+        return 1
+    except OSError as err:
+        logger.exception(err)
+        logger.fatal(err)
+        return 2
+    finally:
+        logger.warning("We are done, bye bye.")
+        if server is not None:
+            server.close()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', default="localhost",
+                        help="Host the key listener is running on")
+    parser.add_argument('--port', default=8888,
+                        help="Port the key listener is running on")
+    parser.add_argument('--certs', default="/usr/local/certs",
+                        help="Directory to search for SSL certificates")
+    parser.add_argument('--cert-file', default="server.crt",
+                        help="Certificate file name")
+    parser.add_argument('--key-file', default="server.key",
+                        help="Key file name")
+    parser.add_argument('--log', default="/var/tmp/key_listener.log",
+                        help="Log file path")
+    args = parser.parse_args()
+    arg_dict = vars(args)
+    host = arg_dict['host']
+    port = arg_dict['port']
+    cert_dir = arg_dict['certs']
+    cert_file = arg_dict['cert_file']
+    key_file = arg_dict['key_file']
+    log_file = arg_dict['log']
+    sys.exit(asyncio.run(main()))

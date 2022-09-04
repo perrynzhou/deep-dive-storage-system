@@ -1,0 +1,29 @@
+WiredTiger 11.0.0: (May 12, 2022)
+
+This is version 11.0.0 of WiredTiger.
+
+WiredTiger release packages and documentation can be found at:
+
+	https://source.wiredtiger.com/
+
+The documentation can be found at:
+
+	https://source.wiredtiger.com
+
+The WiredTiger source code can be found at:
+
+	https://github.com/wiredtiger/wiredtiger
+
+WiredTiger uses JIRA for issue management:
+
+	https://jira.mongodb.org/browse/WT
+
+Please do not report issues through GitHub.
+
+WiredTiger licensing information can be found at:
+
+	https://source.wiredtiger.com/license.html
+
+For general questions and discussion, there's a WiredTiger group:
+
+	https://groups.google.com/group/wiredtiger-users

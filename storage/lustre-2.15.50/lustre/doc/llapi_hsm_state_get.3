@@ -1,0 +1,159 @@
+.TH lustreapi 3 "2014 Sep 22" Lustre "Lustre Application Interface Library"
+.SH NAME
+llapi_hsm_state_get, llapi_hsm_state_get_fd \- get HSM state
+information for a file on a Lustre filesystem
+.SH SYNOPSIS
+.nf
+.B #include <lustre/lustreapi.h>
+.sp
+.BI "int llapi_hsm_state_get(const char *" path ", struct hsm_user_state *" hus ");"
+.sp
+.BI "int llapi_hsm_state_get_fd(int " fd ", struct hsm_user_state *" hus ");"
+.sp
+.fi
+.SH DESCRIPTION
+.LP
+These functions return the HSM state flags and HSM archive ID for the
+file referred to by
+.IR path
+or
+.IR fd .
+Information is returned in the
+.I hus
+argument which should already be allocated.
+.nf
+.LP
+struct hsm_user_state {
+	__u32	hus_states;
+	__u32	hus_archive_id;
+};
+.fi
+.TP 7
+.I hus_archive_id
+External HSM archive ID associated with this file.
+.TP
+.I hus_states
+Flag mask for different HSM states and policy hints.
+.LP
+
+The value of
+.I hus_states
+is formed by bitwise or'ing the following possible states:
+
+.TP 7
+.B HS_EXISTS
+The file has been assigned to an archive and provided to the backend
+for archiving. Partial copies may exist in the HSM archive and will
+need to be deleted when the file is removed.
+.TP
+.B HS_DIRTY
+The file content is not in sync with the HSM archive. This flag is
+set automatically when a file with HS_EXISTS set is changed, and can
+be set explicitly by a user.
+.TP
+.B HS_RELEASED
+The file content is not present in Lustre, and must be restored from
+the HSM archive before the file can be accessed. File must also be
+HS_ARCHIVED state and not HS_DIRTY.
+.TP
+.B HS_ARCHIVED
+A complete copy of the file content exists in the HSM archive.
+.TP
+.B HS_NORELEASE
+This flag indicates the file content should never be released. File
+content will stay in Lustre even if a copy exists in HSM backend.
+This can be set by a user.
+.TP
+.B HS_NOARCHIVE
+The file will not be archived. This might be used for a large temporary
+file, for example. This can be set by a user.
+.TP
+.B HS_LOST
+The file content in the archive is not available, and file can not be
+restored. If this file is also HS_RELEASED, then attempts to access
+the file will fail. This flag can be set by an administrator.
+
+.SH RETURN VALUES
+.LP
+.B llapi_hsm_state_get(\|)
+and
+.B llapi_hsm_state_get_fd(\|)
+return:
+.TP 7
+.B 0
+on success
+.TP
+.B -errno
+on failure
+.SH ERRORS
+.TP 7
+.SM ENOMEM
+failed to allocate memory.
+.TP
+.SM ENAMETOOLONG
+.I path
+was too long.
+.TP
+.SM ENOENT
+.I path
+does not point to a file or a directory.
+.TP
+.SM ENOTTY
+.I path
+does not point to a Lustre filesystem.
+.SH EXAMPLE
+.nf
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+
+#include <lustre/lustreapi.h>
+
+int main(int argc, char **argv)
+{
+	struct hsm_user_state hus;
+	int rc;
+
+	if (argc < 2) {
+		fprintf(stderr, "usage: prog FILEPATH\\n");
+		exit(1);
+	}
+
+	rc = llapi_hsm_state_get(argv[1], &hus);
+	if (rc) {
+		fprintf(stderr, "can't get hsm state for %s: %s\\n",
+			argv[1], strerror(-rc));
+		exit(rc);
+	}
+
+	if (hus.hus_states & HS_RELEASED)
+		printf(" released");
+	if (hus.hus_states & HS_EXISTS)
+		printf(" exists");
+	if (hus.hus_states & HS_ARCHIVED)
+		printf(" archived");
+
+	/* Display settable flags */
+	if (hus.hus_states & HS_NORELEASE)
+		printf(" never_release");
+	if (hus.hus_states & HS_NOARCHIVE)
+		printf(" never_archive");
+	if (hus.hus_states & HS_DIRTY)
+		printf(" dirty");
+	if (hus.hus_states & HS_LOST)
+		printf(" lost_from_hsm");
+
+	if (hus.hus_archive_id != 0)
+		printf(", archive_id:%d", hus.hus_archive_id);
+
+	printf("\\n");
+
+	exit(0);
+}
+.fi
+.SH "SEE ALSO"
+.BR lustre (7),
+.BR lustreapi (7),
+.BR llapi_hsm_state_set (3),
+.BR llapi_hsm_state_set_fd (3),
+.BR lfs-hsm (1)

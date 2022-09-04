@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "=== Router Buffers ======="
+lctl get_param -n buffers 2> /dev/null
+echo
+
+echo "=== NIs ============================================"
+lctl get_param -n nis 2> /dev/null
+echo
+
+echo "=== Peers ============================================================="
+lctl get_param -n peers 2> /dev/null
+echo

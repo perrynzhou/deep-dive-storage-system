@@ -1,0 +1,157 @@
+.TH llapi_ladvise 3 "2015 Dec 15" "Lustre User API"
+.SH NAME
+llapi_ladvise \- give IO advice/hints on a Lustre file to the server
+.SH SYNOPSIS
+.nf
+.B #include <lustre/lustreapi.h>
+.sp
+.BI "int llapi_ladvise(int " fd ", unsigned long long " flags ,
+.BI "                  int " num_advise ",
+.BI "                  struct llapi_lu_ladvise *" ladvise ");"
+.sp
+.fi
+.SH DESCRIPTION
+.LP
+.B llapi_ladvise()
+passes an array of
+.I num_advise
+I/O hints (up to a maximum of
+.BR LAH_COUNT_MAX
+items) in
+.I ladvise
+for the file descriptor
+.I fd
+from an application to one or more Lustre servers.  Optionally,
+.I flags
+can modify how the advice will be processed via bitwise-or'd values:
+.TP
+.B LF_ASYNC
+Client returns to userspace immediately after submitting ladvise RPCs, leaving
+server threads to handle the advices asynchronously.
+.TP
+.B LF_UNSET
+Unset/clear a previous advice (Currently only supports LU_ADVISE_LOCKNOEXPAND).
+.PP
+Each of the
+.I ladvise
+elements is an
+.B llapi_lu_ladvise
+structure, which contains the following fields:
+.PP
+.in +4n
+.nf
+struct llapi_lu_ladvise {
+	__u16 lla_advice;	/* advice type */
+	__u16 lla_value1;	/* values for different advice types */
+	__u32 lla_value2;
+	__u64 lla_start;	/* first byte of extent for advice */
+	__u64 lla_end;		/* last byte of extent for advice */
+	__u32 lla_value3;
+	__u32 lla_value4;
+};
+.fi
+.in
+.TP
+.I lla_ladvice
+specifies the advice for the given file range, currently one of:
+.TP
+.B LU_LADVISE_WILLREAD
+Prefetch data into server cache using optimum I/O size for the server.
+.TP
+.B LU_LADVISE_DONTNEED
+Clean cached data for the specified file range(s) on the server.
+.TP
+.B LU_LADVISE_LOCKAHEAD
+Request an LDLM extent lock of the given mode on the given byte range.
+.TP
+.B LU_LADVISE_NOEXPAND
+Disable extent lock expansion behavior for I/O to this file descriptor.
+.TP
+.I lla_start
+is the offset in bytes for the start of this advice.
+.TP
+.I lla_end
+is the offset in bytes (non-inclusive) for the end of this advice.
+.TP
+.IR lla_value1 , " lla_value2" , " lla_value3" , " lla_value4"
+additional arguments for future advice types and should be
+set to zero if not explicitly required for a given advice type.
+Advice-specific names for these fields follow.
+.TP
+.IR lla_lockahead_mode
+When using LU_ADVISE_LOCKAHEAD, the 'lla_value1' field is used to
+communicate the requested lock mode, and can be referred to as
+lla_lockahead_mode.
+.TP
+.IR lla_peradvice_flags
+When using advices which support them, the 'lla_value2' field is
+used to communicate per-advice flags and can be referred to as
+lla_peradvice_flags.  Both LF_ASYNC and LF_UNSET are supported
+as peradvice flags.
+.TP
+.IR lla_lockahead_result
+When using LU_ADVISE_LOCKAHEAD, the 'lla_value3' field is used to
+communicate the result of the request, and can be referred to as lla_lockahead_result.
+.PP
+.PP
+.B llapi_ladvise()
+forwards the advice to Lustre servers without guaranteeing how and when
+servers will react to the advice. Actions may or may not be triggered when the
+advices are recieved, depending on the type of the advice as well as the
+real-time decision of the affected server-side components.
+
+Typical usage of
+.B llapi_ladvise()
+is to enable applications and users (via
+.BR "lfs ladvise" (1))
+with external knowledge about application I/O patterns to intervene in
+server-side I/O handling. For example, if a group of different clients
+are doing small random reads of a file, prefetching pages into OSS cache
+with big linear reads before the random IO is a net benefit. Fetching
+that data into each client cache with
+.B fadvise()
+may not be, due to much more data being sent to the clients.
+
+LU_LADVISE_LOCKAHEAD merits a special comment. While it is possible and
+encouraged to use it directly in your application to avoid lock contention
+(primarily for writing to a single file from multiple clients), it will
+also be available in the MPI-I/O / MPICH library from ANL for use with the
+i/o aggregation mode of that library. This is intended (eventually) to be
+the primary way this feature is used.
+
+While conceptually similar to the
+.BR posix_fadvise (2)
+and Linux
+.BR fadvise (2)
+system calls, the main difference of
+.B llapi_ladvise()
+is that
+.BR fadvise() / posix_fadvise()
+are client side mechanisms that do not pass advice to the filesystem, while
+.B llapi_ladvise()
+sends advice or hints to one or more Lustre servers on which the file
+is stored. In some cases it may be desirable to use both interfaces.
+.PP
+.SH RETURN VALUES
+.PP
+.B llapi_ladvise()
+return 0 on success, or -1 if an error occurred (in which case, errno is set
+appropriately).
+.SH ERRORS
+.TP 15
+.SM ENOMEM
+Insufficient memory to complete operation.
+.TP
+.SM EINVAL
+One or more invalid arguments are given.
+.TP
+.SM EFAULT
+memory region pointed by
+.I ladvise
+is not properly mapped.
+.TP
+.SM ENOTSUPP
+Advice type is not supported.
+.SH "SEE ALSO"
+.BR lfs-ladvise (1),
+.BR lustreapi (7)

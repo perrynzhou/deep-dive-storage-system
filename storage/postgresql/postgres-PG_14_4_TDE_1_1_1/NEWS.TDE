@@ -1,0 +1,46 @@
+TDE_1.1.1
+=========
+
+Bug Fixes
+---------
+
+1. Make sure that the shared memory data cannot be written to disk.
+
+If the dynamic_shared_memory_type configuration variable is set to "mmap", the
+(unencrypted) shared memory data can be written to disk. This value is rather
+unusual and the initdb utility should never set it, but in theory the DBA can
+do. Our fix is to refuse startup if this value is set and if the instance is
+encrypted at the same time.
+
+
+2. Fixed processing of the "encryption key command".
+
+If the command responsible for generation of the encryption key had to read
+some information (typically the encryption password) from the standard input,
+it did not work with initdb and pg_rewind. Obviously a regression of previous
+changes.
+
+
+TDE_1.1.0
+=========
+
+New Features
+------------
+
+1. Added an option to choose the encryption key length
+
+Initially we only supported 128-bit keys. Now the user can use the --key-bits
+command line option of the initdb application to specify the key length. The
+accepted values are 128, 192 and 256.
+
+2. Improved encryption of temporary files.
+
+A new, unpredictable value of the initialization vector (IV) is now used for
+each execution of encryption. This affects the use cases where (a part of) an
+existing file is overwritten with new data.
+
+
+TDE_1.0.0
+============
+
+The initial implementation of the TDE feature.

@@ -1,0 +1,183 @@
+.\" -*- nroff -*-
+.\" Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
+.\"
+.\" Copyright (c) 2011, 2017, Intel Corporation.
+.\"
+.\" This file may be copied under the terms of the GNU Public License, v2.
+.\"
+.TH tunefs.lustre 8 "2008 Mar 15" Lustre "configuration utilities"
+.SH NAME
+tunefs.lustre \- modify the Lustre configuration information on a disk
+.SH SYNOPSIS
+.br
+.B tunefs.lustre
+[options] 
+.I device
+.br
+.SH DESCRIPTION
+.B tunefs.lustre
+is used to modify the configuration information on a Lustre target
+disk. This includes upgrading old (pre-Lustre 1.6) disks.  This does not
+reformat the disk or erase the target information, but modifying the
+configuration information can result in an unusable filesystem.  You have
+been warned.
+.br
+Changes made here will affect a filesystem only when the target is next
+mounted.
+
+.SH OPTIONS
+.TP
+.BI \--comment= comment
+Set user comment about this disk, ignored by Lustre.
+.TP
+.BI \--dryrun
+Only print what would be done; does not affect the disk.
+.TP
+.BI \--erase-param " param"
+Remove all previously stored instances of the parameter \fIparam\fR. Attempts
+to remove a non-existing parameter appear as successful ones.
+.TP
+.BI \--erase-params
+Remove all previously stored parameter info.
+.TP
+.BI \--failnode= nid,...  
+Set the NID(s) of a failover partner. This option can be repeated as desired.
+Cannot be used with --servicenode.
+.TP
+.BI \--servicenode= nid,....
+Set the NID(s) of all service partner. This option treats all nodes as equal
+service nodes. Cannot be used with --failnode.
+.TP
+.BI \--fsname= filesystem_name  
+The Lustre filesystem this service will be part of.  Default is 'lustre'.
+.TP
+.BI \--index= index
+Force a particular OST or MDT index.
+.TP
+.BI \--mountfsoptions= opts
+Set  the persistent mount options that will be used when Lustre fs.
+WARNING: unlike earlier versions of \fBtunefs.lustre\fR,  this version
+completely replaces the existing mount options with those specified on
+the command line, issuing a warning  on  stderr  if any  of the default
+mount options are omitted.  The defaults for ldiskfs  are
+OST: \fIerrors=remount-ro,mballoc,extents\fR;
+MGS/MDT: \fIerrors=remount-ro,user_xattr\fR.
+\fBDO NOT\fR alter the default mount options unless you know what you are doing.
+.TP
+.BI \--backfs-mount-opts=opts
+Use these options for mounting backing fs while tune.lustre is working.
+.TP
+.BI \--network= net,...
+Network(s) to restrict this ost/mdt to. This option can be repeated as desired.
+.TP
+.BI \--mgs
+Add a configuration management service to this target.
+.TP
+.BI \--mgsnode= nid,...  
+Set the NID(s) of the MGS node, required for all targets other than the MGS.
+.TP
+.BI \--nomgs
+Remove a configuration management service to this target.
+.TP
+.BI \--param " key=value"
+Set permanent parameter
+.I key
+to value
+.IR value .
+This option can be repeated as desired. All previously stored instances of
+.IR key
+are removed, and new instances specified in the command line are added.
+Typical options might include:
+.RS
+.I \--param sys.timeout=40
+.RS
+System obd timeout
+.RE
+.I \--param lov.stripesize=2M
+.RS
+Default stripe size
+.RE
+.I \--param lov.stripecount=2
+.RS
+Default stripe count
+.RE
+.I \--param failover.mode=failout
+.RS
+Return errors instead of waiting for recovery
+.RE
+.RE
+.TP
+.BI \--force-nohostid
+Ignore unset hostid for ZFS import protection. To set hostid either set
+spl_hostid option for spl.ko or set /etc/hostid, see zgenhostid(8).
+.TP
+.BI \--quiet
+Print less information.
+.TP
+.BI \--verbose
+Print more information.
+.TP
+.BI \--writeconf
+Erase the configuration logs for the filesystem that this server is part of, and regenerate them. This is very dangerous.  All clients must be unmounted and servers for this filesystem should be stopped.  
+All targets (OSTs/MDTs) must then be restarted to regenerate the logs. 
+No clients should be started until all targets have restarted.
+.br
+Correct order of operations is:
+.br
+* Unmount all clients of this filesystem.
+.br
+* Unmount MDT and all OSTs of this filesystem.
+.br
+* Run \fBtunefs.lustre --writeconf <device>\fR on every server.
+.br
+* Mount MDT and OSTs.
+.br
+* Mount clients
+.TP
+.BI \--nolocallogs
+Use configuration logs from the MGS, not local ones.
+.br
+There is feature that starts a target with a local copy of
+the config log in order to avoid a delay in communicating with
+the MGS and to load MGS log updates later on.
+However, that feature is not always useful.
+.br
+replace_nids changes config logs on the server side and local copies
+become invalid. --nolocallogs sets the nolocallogs mount flag,
+which causes the local copy of the config log to be ignored.
+The flag is reset once new logs are downloaded from MGS.
+.TP
+.BI \--quota
+Enable space accounting on old 2.x devices.
+
+.SH EXAMPLES
+.TP
+.B tunefs.lustre --erase-params --mgsnode=<new_nid> --writeconf /dev/sda
+Change the MGS NID address. (This should be done on every target disk,
+since they should all be contacting the same MGS.)
+.TP
+.B tunefs.lustre --param "failover.node=192.168.0.13@tcp0" /dev/sda
++Remove all previous failover NID locations for this target, and add a new
++failover NID location for this target.
++.TP
++.B tunefs.lustre --erase-param failover.node /dev/sda
++Remove all failover NID locations for this target.
+.TP
+.B tunefs.lustre --mgs --mdt --fsname=testfs /dev/sda
+Upgrade an old 1.4.X Lustre MDT to 1.6. The new filesystem name is "testfs". 
+.TP
+.B tunefs.lustre --writeconf --mgs --mdt --fsname=testfs /dev/sda1
+Upgrade an old 1.4.X Lustre MDT to 1.6, and start with brand-new 1.6
+configuration logs. All old servers and clients must be stopped.
+
+.SH AVAILABILITY
+.B tunefs.lustre
+is part of the 
+.BR Lustre (7) 
+filesystem package.
+.SH SEE ALSO
+.BR lustre (7),
+.BR mkfs.lustre (8),
+.BR mount.lustre (8),
+.BR lctl (8),
+.BR lfs (1)

@@ -1,0 +1,183 @@
+<!-- doc/src/sgml/keycmd.sgml -->
+
+<sect1 id="keycmd" xreflabel="keycmd">
+ <title>keycmd</title>
+
+ <indexterm zone="keycmd">
+  <primary>keycmd</primary>
+ </indexterm>
+
+ <para>
+  <filename>keycmd</filename> is one particular implementation of the command
+  to retrieve the encryption key for the <productname>PostgreSQL</productname>
+  server. It consists of two scripts:
+
+  <orderedlist spacing="compact">
+   <listitem>
+    <para>
+     <literal>key_listener</literal> - this is to be called via the
+     <literal>encryption_key_command</literal> configuration variable, as
+     described in <xref linkend="encryption"/>. It binds to the specified port
+     and waits for the key. Once the key has arrived, it's printed to the
+     standard output.
+    </para>
+
+    <cmdsynopsis>
+     <command>key_listener</command>
+     <arg choice="opt"><option>--host</option> <replaceable>host</replaceable></arg>
+     <arg choice="opt"><option>--port</option> <replaceable>port</replaceable></arg>
+     <arg choice="opt"><option>--certs</option> <replaceable>directory</replaceable></arg>
+    </cmdsynopsis>
+
+    <para>
+     Following is description of the options:
+
+     <variablelist>
+
+      <varlistentry>
+       <term><option>--host</option></term>
+       <listitem>
+        <para>
+         Host or IP on which the listener waits for the encryption key.
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><option>--port</option></term>
+       <listitem>
+        <para>
+         Port on which the listener waits for the encryption key.
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><option>--certs</option></term>
+       <listitem>
+        <para>
+         Directory in which the listener expects the SSL certificates to
+         initialize the secured connection for the key transfer. If not
+         specified, it looks for the certificates in the current directory.
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><option>--cert-file</option></term>
+       <listitem>
+        <para>
+         Certificate file name, defaults to <literal>server.crt</literal>
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><option>--key-file</option></term>
+       <listitem>
+        <para>
+         Key file name, defaults to <literal>server.key</literal>
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><option>--log</option></term>
+       <listitem>
+        <para>
+         Path to the log file.
+        </para>
+       </listitem>
+      </varlistentry>
+     </variablelist>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <literal>key_talker</literal> - this reads the key from the
+     command line and sends it to the listener via secured connection.
+    </para>
+
+    <cmdsynopsis>
+     <command>key_talker</command>
+     <arg choice="opt"><option>--host</option> <replaceable>host</replaceable></arg>
+     <arg choice="opt"><option>--port</option> <replaceable>port</replaceable></arg>
+     <arg choice="plain"><option>--key</option> <replaceable>key</replaceable></arg>
+    </cmdsynopsis>
+
+    <para>
+     Following is description of the options:
+     <variablelist>
+
+      <varlistentry>
+       <term><option>--host</option></term>
+       <listitem>
+        <para>
+         Host or IP to which the encryption key should be sent.
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><option>--port</option></term>
+       <listitem>
+        <para>
+         Port to which the encryption key should be sent.
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><option>--key</option></term>
+       <listitem>
+        <para>
+         The encryption key to be sent.
+        </para>
+       </listitem>
+      </varlistentry>
+     </variablelist>
+    </para>
+   </listitem>
+  </orderedlist>
+ </para>
+
+
+ <sect2>
+  <title>Example</title>
+
+  <para>
+   First, make sure you have the SSL certificate - see
+   <xref linkend="ssl-certificate-creation"/> how to create it.
+  </para>
+
+  <para>
+   Then set <literal>encryption_key_command</literal>
+   in <filename>postgresql.conf</filename> so it points
+   to <literal>key_listener</literal>:
+<programlisting>
+encryption_key_command = '/usr/local/bin/key_listener --certs /home/postgres/certs'
+</programlisting>
+   Here the <literal>--certs</literal> option tells
+   where <literal>key_listener</literal> should look for the certificate to
+   establish the secured connection that it will use to receive the encryption
+   key. Default values are used for the other options.
+  </para>
+
+  <para>
+   Then initiate the <productname>PostgreSQL</productname> server startup
+   (typically using the <command>pg_ctl</command> command) and while the
+   server is starting, use <literal>key_listener</literal> in another
+   console (which can in fact be on another host) to send the encryption key
+   to the key listener:
+<programlisting>
+key_listener --key 3a8455151d1e8fcd5d308667ddc43086
+</programlisting>
+   Once the key listener receives the key, it prints it out to its standard
+   output so that the <productname>PostgreSQL</productname> server can read it
+   and finish the startup.
+  </para>
+ </sect2>
+
+
+</sect1>

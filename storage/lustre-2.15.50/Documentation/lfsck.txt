@@ -1,0 +1,309 @@
+
+LFSCK: an online file system checker for Lustre
+===============================================
+
+LFSCK is an online tool to scan, check and repair a Lustre file system that can
+be used with a file system that is mounted and in use. It contains three main
+LFSCK components: OI Scrub (primarily of use for ldiskfs-based backend), Layout
+LFSCK, and Namespace LFSCK. Each component identifies different types of Lustre
+inconsistencies.
+
+LFSCK does not verify the on-disk format and assumes that it is consistent. For
+ldiskfs-based backend, e2fsck from e2fsprogs should be used to ensure the on
+disk format is consistent. ZFS is designed to always have a valid on-disk
+structure and as a result, no 'fsck' is necessary.
+
+* OI Scrub
+
+OI scrub is of primary use for ldiskfs-based targets. It maintains the ldiskfs
+special OI mapping consistency, reconstructs the OI mapping after the target
+is restored from file-level backup or is otherwise corrupted, and upgrades
+(if necessary) the OI mapping when target (MDT/OST) is upgraded from a
+previous release.
+
+* Layout LFSCK
+
+Layout LFSCK is concerned with consistency between metadata targets (MDTs) and
+object storage targets (OSTs). It automatically corrects inconsistencies where
+possible.
+
+* Namespace LFSCK
+
+Namespace LFSCK is concerned with consistency across the Lustre namespace.
+Namespace LFSCK works transparently across single and multiple MDTs.
+
+Quick usage instructions
+===============================================
+
+*** Start LFSCK ***
+
+If you want all LFSCK checks to be run on all MDTs and OSTs, run on MDT0000:
+# lctl lfsck_start -M $FSNAME-$TARGETNAME -A -t all -r
+
+(FSNAME: the specified file system name created during format, e.g. "testfs".
+ TARGETNAME: the target name in the system, e.g. "MDT0000" or "OST0001".)
+
+If you want OI Scrub only on one MDT or OST, use this command on the MDT/OST:
+# lctl lfsck_start -t scrub -M $FSNAME-$TARGETNAME
+
+If you want LFSCK Layout or LFSCK Namespace on the given MDT(s), use:
+# lctl lfsck_start -t namespace -M $FSNAME-$MDTNAME
+or
+# lctl lfsck_start -t layout -M $FSNAME-$MDTNAME
+
+(MDTNAME: the MDT name in the system, e.g. "MDT0000", "MDT0001".)
+
+You can trigger multiple LFSCK components via single LFSCK command:
+# lctl lfsck_start -t namespace -t layout -M $FSNAME-$MDTNAME
+
+For more usage, please run:
+# lctl lfsck_start -h
+
+*** Check the status of LFSCK ***
+
+By default LFSCK logs all operations to the Lustre internal debug
+log, which can be dumped to a file on each server with:
+# lctl debug_kernel /tmp/debug.lfsck
+
+However, since the internal debug log is of limited size, it is
+possible to dump lfsck logs to the console for capture with syslog. 
+# lctl set_param printk=+lfsck
+
+Another option is to dump the LFSCK logs to a file directly from the
+kernel, which is more efficient than logging to the console if there
+are lots of repairs needed (e.g. after a filesystem upgrade or if the
+OI files are lost).  The following command should be run on all MDS
+and OSS nodes to generate a log file (maximum 1024MB in size):
+# lctl debug_daemon start /tmp/debug.lfsck 1024
+
+Each LFSCK component has its own status interface on a given target.
+It is possible to monitor the LFSCK status on the local node via:
+# lctl lfsck_query -M $FSNAME-$TARGET
+
+It is also possible to get type-specific status, for example on
+the Namespace LFSCK status on the MDT:
+# lctl get_param -n mdd.$FSNAME-$MDTNAME.lfsck_namespace
+
+Or the Layout LFSCK status on the OST:
+# lctl get_param -n obdfilter.$FSNAME-$OSTNAME.lfsck_layout
+NOTE: Layout LFSCK also works on a OST.
+
+(OSTNAME: the OST name in the system, e.g. "OST0000", "OST0001".)
+
+Or the OI Scrub status on the underlying ldiskfs MDT/OST:
+# lctl get_param -n osd-ldiskfs.$FSNAME-$TARGETNAME.oi_scrub
+
+*** Stop the currently running LFSCK ***
+
+Run the command on the given MDT/OST:
+# lctl lfsck_stop -M $FSNAME-$MDTNAME
+
+To stop all LFSCK across the system:
+# lctl lfsck_stop -M $FSNAME -A
+
+
+LFSCK Features Overview
+===============================================
+
+* online scanning.
+* control of scanning rate.
+* automatic checkpoint recovery of an interrupted scan.
+* monitoring using proc and lctl interfaces.
+* maintain OI mapping for ldiskfs-based backend.
+  * reconstruction of the OI mapping after the target (MDT/OST) restored from
+    file-level backup.
+  * generate OI mapping for the MDT upgraded from 1.8.
+  * rebuild OI mapping if some of them lost or crashed.
+* check and repair kinds of namespace related inconsistent issues:
+  * the FID-in-dirent should be consistent with the FID-in-LMA.
+  * the linkEA should be consistent with related name entries.
+  * Dangling name entry: the name entry exists, but related MDT-object does
+    not exist.
+  * Orphan MDT-object: the MDT-object exists, but there is no name entry to
+    reference it.
+  * Multiple-referenced name entry: more than one MDT-objects point back to
+    the same name entry, but the name entry only references one of them.
+  * Unmatched name entry and MDT-object pairs: the name entry references the
+    MDT-object that has no linkEA for back-reference or points back to another
+    name entry that does not exist or does not reference the MDT-object.
+  * Unmatched object types: the file type in the name entry does not match the
+    type that is claimed by the MDT-object.
+  * Invalid nlink count: the MDT-object's nlink count does not match the number
+    of name entries that reference such MDT-object.
+  * Invalid name hash for striped directory: the name hash for the name entry
+    on a shard of a striped directory does not match the index stored in the
+    shard's LMV xattr.
+* verify layout consistency between MDT and OST:
+  * MDT-object with dangling reference: the MDT-object1 claims that the
+    OST-object1 is its child stripe, but on the OST, the OST-object1 does not
+    exist, or it is not materialized (so does not recognize the MDT-object1 as
+    its parent).
+  * Unmatched referenced MDT-object/OST-object pairs: the MDT-object1 claims
+    that the OST-object1 is its child stripe, but the OST-object1 claims that
+    its parent is the MDT-object2 rather than the MDT-object1. On the MDT,
+    the MDT-object2 does not exist, or not recognize the OST-object1 as its
+    child stripe. An additional case exists where the child index stored in
+    the parent layout information does not match the index information stored
+    in the child itself.
+  * Multiple referenced OST-object: the MDT-object1 claims that the OST-object1
+    is its child stripe, but the OST-object1 claims that its parent is the
+    MDT-object2 rather than the MDT-object1. On the other hand, the MDT-object2
+    recognizes the OST-object1 as its child stripe.
+  * Unreferenced (orphan) OST-object: the OST-object1 claims that the
+    MDT-object1 is its parent, but on the MDT, the MDT-object1 does not exist,
+    or it does not recognize the OST-object1 as its child.
+
+
+Parameter Files
+===============================================
+
+Information about the currently running LFSCK can be found in the following
+parameter files on the MDS and OSS nodes, using "lctl get_param":
+    mdd.$FSNAME-$MDTNAME.lfsck_layout
+    mdd.$FSNAME-$MDTNAME.lfsck_namespace
+    obdfilter.$FSNAME-$OSTNAME.lfsck_layout
+    osd-ldiskfs.$FSNAME-$TARGETNAME.oi_scrub
+
+
+LFSCK master slave design
+===============================================
+
+*** Master Engine ***
+
+The LFSCK master engine resides on each MDT, and is implemented as a kernel
+thread in the LFSCK layer. The master engine is responsible for scanning on the
+MDTs and also controls slave engines on OSTs. Scanning on both MDTs and OSTs
+occurs in two stages. First-stage scanning will identify and resolve most of
+inconsistencies. In the second stage, information from the first stage will be
+used to resolve a remaining set of inconsistencies that had uncertain
+resolution after only one scan.
+
+
+1. The master engine is started either by the user space command or an
+excessive number of inconsistency events are detected (defined by
+osd-ldiskfs.<fsname>-<targetname>.full_scrub_threshold_rate). On starting, the
+master engine sends RPCs to other MDTs (when necessary) to start other master
+engines and to related OSTs to start the slave engines.
+
+2. The master engine on the MDS scans the MDT device using namespace iteration
+(described below). For each striped file, it calls the registered LFSCK process
+handlers to perform the relevant system consistency checks/repairs, which are
+enumerated in the 'features' section. All objects on OSTs that are never
+referenced during this scan (because, for example, they are orphans) are
+recorded in an OST orphan object index on each OST.
+
+3. After the MDT completes first-stage system scanning, the master engine sends
+RPCs to related LFSCK engines on other targets to notify that the first-stage
+scanning is complete on this MDT. The MDT waits until related targets have
+completed the first-stage scanning. At this point, the first stage scanning is
+complete and the second-stage scanning begins.
+
+*** Slave Engine ***
+
+The LFSCK slave engine resides on each OST and is implemented as a kernel
+thread in the LFSCK layer. This kernel thread drives the first-stage system
+scan on the OST.
+
+1. When the slave engine is triggered by the RPC from the master engine in the
+first-stage scanning, the OST scans the local OST device to generate the
+in-memory OST orphan object index.
+
+2. When the first-stage scanning (for both MDTs and OSTs) is complete a list of
+non-referenced OST-objects has been accumulated. Only objects that are not
+accessed during the first stage scan are regarded as potential orphans.
+
+3. In the second-stage scanning, the OSTs work to resolve orphan objects in the
+file system. The OST orphan object index is used as input to the second stage.
+For each item in the index, the presence of a parent MDT object is verified.
+Orphan objects will either be relinked to an existing file if found - or moved
+into a new file in .lustre/lost+found.
+
+If multiple MDTs are present, MDTs will check/repair MDT-OST consistency in
+parallel. To avoid redundant scans of the OST device the slave engine will not
+begin second-stage system scans until all the master engines complete the
+first-stage system scan. For each OST there is a single OST orphan object
+index, regardless of how many MDTs are in the MDT-OST consistency check/repair.
+
+
+Object traversal design reference
+===============================================
+
+Objects are traversed by LFSCK with two methods: object-table based iteration
+and namespace based directory traversal.
+
+*** Object-table Based Iteration ***
+
+The Object Storage Device (OSD) is the abstract layer above a concrete backend
+file system (i.e. ldiskfs, ZFS, Btrfs, etc.). Each OSD implementation differs
+internally to support concrete file systems. The object-table based iteration
+is implemented inside the OSD. It uses the backend special efficient scanning
+method, such as linear scanning for ldiskfs backend, to scan the local device.
+Such iteration is presented via the OSD API as a virtual index that contains
+all the objects that reside on this target.
+
+*** Namespace Based Directory Traversal ***
+
+In addition to object-table based iteration, there are directory based items
+that need scanning for namespace consistency. For example, FID-in-dirent and
+LinkEA are directory based features.
+
+A naive approach to namespace traversal would be to descend recursively from
+the file system root. However, this approach will typically generate random IO,
+which for performance reasons should be minimized. In addition, one must
+consider operations (i.e. rename) taking place within a directory that is
+currently being scanned. For these reasons a hybrid approach to scanning is
+employed.
+
+1. LFSCK begins object-table based iteration.
+
+2. If a directory is discovered then namespace traversal begins. LFSCK reads
+the entries of the directory to verify and repair filename->FID mappings, but
+does not descend into sub-directories.  LFSCK ignores rename operations during
+the directory traversal because the subsequent object-table based iteration
+will guarantee processing of renamed objects. Reading directory blocks is a
+small fraction of the data needed for the objects they reference. In addition,
+entries in the directory are typically allocated following the directory
+object on the disk so for many directories the children objects will already
+be available because of pre-fetch.
+
+3. Process each entry in the directory checking the FID-in-dirent and the FID
+in the object LMA are consistent. Repair if inconsistent. Check also that the
+linkEA points back to the parent object. Check also that '.' and '..' entries
+of the directory itself are consistent.
+
+4. Once all directory entries are exhausted, return to object-table based
+iteration.
+
+
+References
+===============================================
+
+source code: 	   lustre/lfsck/*.[ch], lustre/osd-ldiskfs/scrub.c
+
+operations manual: https://build.whamcloud.com/job/lustre-manual/lastSuccessfulBuild/artifact/lustre_manual.xhtml#dbdoclet.lfsckadmin
+
+useful links:      https://www.youtube.com/watch?v=jfLo1eYSh2o
+                   http://wiki.lustre.org/images/c/c6/Zhuravlev_LFSCK_LUG-2013.pdf
+
+
+Glossary of terms
+===============================================
+
+FID - File IDentifier. A Lustre file system identifies every file and object
+  with a unique 128-bit ID.
+
+FID-in-dirent - FID in Directory Entry. To enhance the performance of readdir,
+  the FID of a file is recorded in its directory name entry.
+
+linkEA - Link Extended Attributes. When a file is created or hard-linked the
+  parent directory name and FID are recorded as extended attributes to the file.
+
+LMA - Lustre Metadata Attributes. A record of Lustre specific attributes, for
+  example HSM state, self-FID, and so on.
+
+OI - Object Index. A table that maps FIDs to inodes. On ldiskfs-based targets,
+  this table must be regenerated if a file level restore is performed as inodes
+  will change.
+
+OSD - Object storage device. A generic term for a storage device with an
+  interface that extends beyond a block-oriented device interface.

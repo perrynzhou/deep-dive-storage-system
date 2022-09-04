@@ -1,0 +1,5 @@
+MOSTLYCLEANFILES := @MOSTLYCLEANFILES@
+
+# Override the default distclean, which removes Makefile
+distclean: distclean-recursive
+	@true

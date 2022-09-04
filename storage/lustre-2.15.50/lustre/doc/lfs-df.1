@@ -1,0 +1,243 @@
+.TH lfs-df 1 "2016 Dec 7" Lustre "user utilities"
+.SH NAME
+lfs df \- report Lustre filesystem disk usage
+.SH SYNOPSIS
+.BR "lfs df" " [" -i "] [" -h | -H ]
+.RB [ --lazy | -l ]
+.RB [ --pool | -p
+.IR <fsname> [. <pool> ]]
+.RB [ --verbose | -v ]
+.RI [ path ]
+.SH DESCRIPTION
+.B lfs df
+displays filesystem usage information by default for each Lustre
+filesystem currently mounted on that node, or for the filesystem
+that contains
+.I path
+if given. It displays the current usage and totals for each MDT and
+OST separately, as well as a per-filesystem summary that matches
+.BR df (1)
+output for each filesystem.
+.PP
+By default
+.B lfs df
+reports the
+.I space
+usage of the OSTs (the MDT space usage is shown only for reference).  With
+.B -i
+it reports the
+.I inode
+(object) usage for each target and in the summary.  For ZFS-backed
+targets, the
+.B IUsed
+count accurately reflects the number of in-use objects on each target,
+but the
+.B Inodes
+total and
+.B Free
+inode counts are
+.I estimated
+based on the current average (mean) space used per object on each target,
+and may fluctuate over time to reflect the current usage pattern of
+the target.  The estimate becomes more accurate as the target becomes
+more full, assuming the usage pattern is consistent.
+.PP
+.B lfs df
+may also report additional target status as the last column in the
+display, if there are issues with that target.  States include:
+.RS 0.3i
+.TP
+.B D: degraded
+The target has a failed drive in the RAID device, or is undergoing
+RAID reconstruction.  This state is marked on the server automatically
+for ZFS targets via
+.BR zed (8),
+or a (user-supplied) script that monitors the target device and sets
+.B 'lctl set_param obdfilter.\fI<target>\fB.degraded=1'
+on the OST.  This target will be avoided for new allocations, but
+will still be used for existing files located there or if there are
+not enough non-degraded OSTs to make up a widely-striped file.
+.TP
+.B N: no-precreate
+The target is configured to deny object precreation by the
+.B 'lctl set_param obdfilter.\fI<target>\fB.no_precreate=1'
+parameter or
+.B '-o no_precreate'
+mount option.  This may be done to add an OST to the filesystem without
+allowing objects to be allocated on it yet, or for other reasons.
+.TP
+.B R: read-only
+The target filesystem is marked read-only due to filesystem
+corruption detected by ldiskfs or ZFS.  No modifications are
+allowed on this OST, and it needs to have
+.BR e2fsck (8)
+or
+.BR zpool (8) " scrub"
+run to repair the underlying filesystem.
+.TP
+.B S: out-of-space
+The target filesystem has less than the minimum required free space and
+will not be used for new object allocations until it has more free space.
+.TP
+.B I: out-of-inodes
+The target filesystem has less than the minimum required free inodes and
+will not be used for new object allocations until it has more free inodes.
+.TP
+.B f: flash
+The target filesystem is using a flash (non-rotational) storage device.
+This lower-case status is only shown in conjunction with the
+.B -v
+option, since it is not an error condition.
+.RE
+.SH OPTIONS
+The various options supported by
+.B lfs df
+are listed and explained below:
+.TP
+.BR -h ", " --human-readable
+Print output in a human readable format (e.g. 16.3T, 4.25P).
+Suffixes are base-2 units (i.e. 1 GiB = 1024 MiB).
+.TP
+.BR -H ", " --si
+Like
+.BR -h ,
+but suffixes are SI base-10 units (i.e. 1 GB = 1000 MB).
+.TP
+.BR -i ", " --inodes
+Print information about the inode usage and totals for the MDTs and
+OSTs rather than space usage.  Note that the
+.B Inodes
+total,
+.BR IUsed ,
+and
+.B IFree
+counts typically reflect the
+.I sum
+of values from the MDTs.  If the total number of objects available
+on the OSTs is smaller (factoring in the filesystem default
+.BR stripe_count ,
+as one OST object is used for each stripe in a file)
+then the reported
+.B Inodes
+and
+.B IFree
+values will be reduced to reflect the
+.I minimum
+number of files that could potentially be created with the default
+stripe count.  The actual total number of files that can be created
+may be different.
+.TP
+.BR -l ", " --lazy
+Do not attempt to contact any OST or MDT not currently connected to
+the client.  This avoids blocking the
+.B lfs df
+output if a target is offline or unreachable, and only returns the
+space on OSTs that can currently be accessed.
+.TP
+.BR -p ", " --pool= [ \fIfsname\fR .] \fIpool\fR
+Limit the usage to report only MDTs and OSTs that are in the specified
+.IR pool .
+If multiple filesystems are mounted, list OSTs in
+.I pool
+for every filesystem, or limit the display to only a pool for a
+specific filesystem if
+.I fsname.pool
+is given.  Specifying both the fsname and pool like:
+.br
+.BI "lfs df --pool=" fsname.pool
+.br
+is equivalent to specifying the mountpoint for the given
+.IR fsname :
+.br
+.BI "lfs df --pool=" "pool /mnt/fsname"
+.TP
+.BR -v ", " --verbose
+Show deactivated MDTs and OSTs in the listing, along with any
+additional status flags for each MDT and OST.  By default, any
+MDTs and OSTs that are deactivated by the administrator are not shown.
+However, targets that are only temporarily inaccessible are still shown.
+.SH EXAMPLES
+.TP
+.B $ lfs df -hv /mnt/testfs
+Lists space usage per OST and MDT for the
+.B testfs
+filesystem in human readable format.
+.PP
+.RS 0.75i
+UUID                 bytes  Used   Avail Use% Mounted on
+.br
+testfs-MDT0000_UUID  13.0G  1.2G   11.0G  10% /testfs[MDT:0]
+.br
+testfs-OST0000_UUID   3.6T  2.9T  585.7G  84% /testfs[OST:0]
+.br
+testfs-OST0001_UUID   3.6T  3.1T  472.5G  87% /testfs[OST:1] D
+.br
+testfs-OST0002_UUID   3.6T  3.0T  570.3G  84% /testfs[OST:2] DR
+.br
+OST0003           : inactive device
+.br
+testfs-OST0006_UUID   5.4T  4.9T  417.8G  92% /testfs[OST:3]
+.br
+
+filesystem_summary:  16.2T 13.8T    2.0T  88% /testfs
+.br
+.RE
+.PP
+The above example output shows that
+.B OST0003
+is currently temporarily inactive or offline, while
+.B OST0004
+and
+.B OST0005
+are not shown at all, either because they are marked permanently offline
+by the administrator (via
+.BR "lctl set_param -P osc.testfs-OST000[45].active=0" )
+or they were never added to the filesystem.  The
+.B testfs-OST0001
+and
+.B testfs-OST0002
+targets are currently marked
+.BR D egraded
+(perhaps they both share the same underlying storage controller),
+while
+.B testfs-OST0002
+is also marked
+.BR R ead-only,
+after detecting non-recoverable corruption in the backing filesystem.
+.TP
+.B $ lfs df -iH
+List inode usage per OST and MDT for all mounted Lustre filesystems.
+.RS 0.75i
+UUID                Inodes  IUsed  IFree IUse% Mounted on
+.br
+testfs-MDT0000_UUID 932.2k 884.6k  47.6k  95% /testfs[MDT:0]
+.br
+testfs-OST0000_UUID 267.5k 179.6k  87.8k  67% /testfs[OST:0]
+.br
+testfs-OST0001_UUID 268.9k 173.5k  95.4k  64% /testfs[OST:1] D
+.br
+testfs-OST0002_UUID 267.5k 169.6k  97.9k  63% /testfs[OST:2] DR
+.br
+OST0003           : inactive device
+.br
+testfs-OST0006_UUID 426.1k 377.4k  48.7k  88% /testfs[OST:3]
+.br
+
+filesystem_summary: 932.1k 884.6k  47.6k  95% /testfs
+.br
+.RE
+.TP
+.B $ lfs df --pool ssd /mnt/testfs
+List space usage for only the
+.B ssd
+pool of the
+.B testfs
+filesystem.
+.TP
+.B $ lfs df -v /mnt/testfs
+List all MDTs and OSTs for the
+.B testfs
+filesystem, even if not currently connected.
+.SH SEE ALSO
+.BR lfs (1),
+.BR lustre (7)

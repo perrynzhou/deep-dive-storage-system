@@ -1,0 +1,206 @@
+# The format of each line is:
+# mistake||correction
+#
+libcfs_debug_vmsg2|libcfs_debug_msg
+alloca||malloc
+cfs_atomic_add||atomic_add
+cfs_atomic_add_return||atomic_add_return
+cfs_atomic_add_unless||atomic_add_unless
+cfs_atomic_cmpxchg||atomic_cmpxchg
+cfs_atomic_dec||atomic_dec
+cfs_atomic_dec_and_lock||atomic_dec_and_lock
+cfs_atomic_dec_and_test||atomic_dec_and_test
+cfs_atomic_dec_return||atomic_dec_return
+cfs_atomic_inc||atomic_inc
+cfs_atomic_inc_and_test||atomic_inc_and_test
+cfs_atomic_inc_not_zero||atomic_inc_not_zero
+cfs_atomic_inc_return||atomic_inc_return
+CFS_ATOMIC_INIT||ATOMIC_INIT
+cfs_atomic_read||atomic_read
+cfs_atomic_set||atomic_set
+cfs_atomic_sub||atomic_sub
+cfs_atomic_sub_and_test||atomic_sub_and_test
+cfs_atomic_sub_return||atomic_sub_return
+cfs_atomic_t||atomic_t
+cfs_get_random_bytes/get_random_bytes
+cfs_hash_bd_t||struct cfs_hash_bd
+cfs_hash_bucket_t||struct cfs_hash_bucket
+cfs_hash_cond_arg_t||struct cfs_hash_cond_arg
+cfs_hash_dhead_dep_t||struct cfs_hash_dhead_dep
+cfs_hash_dhead_t||struct cfs_hash_dhead
+cfs_hash_head_dep_t||struct cfs_hash_head_dep
+cfs_hash_head_t||struct cfs_hash_head
+cfs_hash_hlist_ops_t||struct cfs_hash_hlist_ops
+cfs_hash_lock_ops_t||struct cfs_hash_lock_ops
+cfs_hash_lock_t||union cfs_hash_lock
+cfs_hash_lookup_intent_t||enum cfs_hash_lookup_intent
+cfs_hash_ops_t||struct cfs_hash_ops
+cfs_hash_t||struct cfs_hash
+cfs_hlist_add_after||hlist_add_after
+cfs_hlist_add_before||hlist_add_before
+cfs_hlist_add_head||hlist_add_head
+cfs_hlist_del||hlist_del
+cfs_hlist_del_init||hlist_del_init
+cfs_hlist_empty||hlist_empty
+cfs_hlist_entry||hlist_entry
+cfs_hlist_for_each||hlist_for_each
+cfs_hlist_for_each_safe||hlist_for_each_safe
+CFS_HLIST_HEAD||HLIST_HEAD
+CFS_HLIST_HEAD_INIT||HLIST_HEAD_INIT
+cfs_hlist_head_t||struct hlist_head
+cfs_hlist_node_t||struct hlist_node
+cfs_hlist_unhashed||hlist_unhashed
+CFS_INIT_HLIST_HEAD||INIT_HLIST_HEAD
+CFS_INIT_HLIST_NODE||INIT_HLIST_NODE
+CFS_INIT_LIST_HEAD||INIT_LIST_HEAD
+cfs_inode_t||struct inode
+cfs_list_add||list_add
+cfs_list_add_tail||list_add_tail
+cfs_list_del||list_del
+cfs_list_del_init||list_del_init
+cfs_list_empty||list_empty
+cfs_list_empty_careful||list_empty_careful
+cfs_list_entry||list_entry
+cfs_list_for_each||list_for_each
+cfs_list_for_each_entry||list_for_each_entry
+cfs_list_for_each_entry_continue||list_for_each_entry_continue
+cfs_list_for_each_entry_reverse||list_for_each_entry_reverse
+cfs_list_for_each_entry_safe_from||list_for_each_entry_safe_from
+cfs_list_for_each_entry_safe_reverse||list_for_each_entry_safe_reverse
+cfs_list_for_each_entry_safe_typed||list_for_each_entry_safe_typed
+cfs_list_for_each_entry_safe||list_for_each_entry_safe
+cfs_list_for_each_entry_typed||list_for_each_entry_typed
+cfs_list_for_each_prev||list_for_each_prev
+cfs_list_for_each_safe||list_for_each_safe
+CFS_LIST_HEAD||LIST_HEAD(foo);
+CFS_LIST_HEAD_INIT||LIST_HEAD_INIT
+cfs_list_move||list_move
+cfs_list_move_tail||list_move_tail
+cfs_list_splice||list_splice
+cfs_list_splice_init||list_splice_init
+cfs_list_splice_tail||list_splice_tail
+cfs_list_t||struct list_head
+CFS_PAGE_MASK||PAGE_MASK
+CFS_PAGE_SIZE||PAGE_SIZE
+cfs_proc_dir_entry_t||struct proc_dir_entry
+cfs_rcu_head_t||struct rcu_head
+cfs_rand||prandom_u32
+cfs_srand||add_device_randomness
+cfs_trimwhite||strim
+cfs_time_add_64||ktime_add
+cfs_time_after||time_after
+cfs_time_aftereq||time_after_eq
+cfs_time_before||time_before
+cfs_time_beforeeq||time_before_eq
+cfs_time_beforeq_64||ktime_compare
+cfs_time_before_64||ktime_before
+cfs_time_current||jiffies
+cfs_time_current_64||ktime_get
+cfs_time_current_sec||ktime_get_real_seconds
+CLASSERT||BUILD_BUG_ON()
+msecs_to_jiffies||cfs_time_seconds
+DEFINE_TIMER||CFS_DEFINE_TIMER
+EWOULDBLOCK||EAGAIN
+container_of0||container_of_safe
+DN_MAX_BONUSLEN||DN_BONUS_SIZE(dnodesize)
+DN_OLD_MAX_BONUSLEN||DN_BONUS_SIZE(DNODE_MIN_SIZE)
+ENOTSUPP||EOPNOTSUPP
+ERR_PTR.PTR_ERR||ERR_CAST
+from_timer||cfs_from_timer
+f_dentry||f_path.dentry
+[^_]get_seconds||ktime_get_real_seconds
+kmem_cache_alloc.*GFP_ZERO||kmem_cache_zalloc
+ldebugfs_remove||debugfs_remove_recursive
+ldlm_appetite_t||enum ldlm_appetite
+ldlm_cancel_flags_t||enum ldlm_cancel_flags
+ldlm_error_t||enum ldlm_error
+ldlm_mode_t||enum ldlm_mode
+ldlm_ns_hash_def_t||struct ldlm_ns_hash_def
+ldlm_ns_type_t||enum ldlm_ns_type
+ldlm_policy_data_t||enum ldlm_policy_data
+ldlm_policy_res_t||enum ldlm_policy_res
+ldlm_side_t||enum ldlm_side
+ldlm_type_t||enum ldlm_type
+ldlm_wire_policy_data_t||union ldlm_wire_policy_data
+lnet_acceptor_connreq_t||struct lnet_acceptor_connreq
+lnet_counters_t||struct lnet_counters
+lnet_handle_wire_t||struct lnet_handle_wire
+lnet_hdr_t||struct lnet_hdr
+lnet_magicversion_t||struct lnet_magicversion
+lnet_ni_status_t||struct lnet_ni_status
+lnet_ping_info_t||struct lnet_ping_info
+lnet_process_id_packed_t||struct lnet_process_id_packed
+HZ||cfs_time_seconds
+LPD64||%lld
+LPLD||%ld
+LPLU||%lu
+LPLX||%#lx
+LPO64||%#llo
+LPPID||%d
+lprocfs_str_to_s64||kstrtoxxx_from_user
+lprocfs_str_with_units_to_u64||sysfs_memparse using sysfs/kernbuf
+lprocfs_str_with_units_to_s64||sysfs_memparse using sysfs/kernbuf
+lu_str_to_s64||sysfs_memparse
+LPROC_SEQ_FOPS||LUSTRE_RW_ATTR
+LPROC_SEQ_FOPS_RO_TYPE||LUSTRE_RO_ATTR
+LPROC_SEQ_FOPS_RO||LUSTRE_RO_ATTR
+LPROC_SEQ_FOPS_RW_TYPE||LUSTRE_RW_ATTR
+LPROC_SEQ_FOPS_WR_ONLY||LUSTRE_WO_ATTR
+LPU64||%llu
+LPX64i||%llx
+LPX64||%#llx
+l_wait_event||wait_event_idle
+l_wait_event_exclusive||l_wait_event_abortable_exclusive
+l_wait_event_exclusive_head||wait_event_idle_exclusive_lifo_timeout
+l_wait_condition||wait_event_idle
+\bMAX\(||max_t
+\bMIN\(||min_t
+mdo2fid||mdd_object_fid
+mktemp||mkstemp
+mti_cattr||mdi_cattr
+mti_chlg_buf||mdi_chlg_buf
+mti_dof||mdi_dof
+mti_dt_rec||mdi_dt_rec
+mti_ent||mdi_ent
+mti_fid||mdi_fid
+mti_fid2||mdi_fid2
+mti_flags||mdi_flags
+mti_hint||mdi_hint
+MTI_KEEP_KEY||MDI_KEEP_KEY
+mti_key||mdi_key
+mti_la_for_fix||mdi_la_for_fix
+mti_la_for_start||mdi_la_for_start
+mti_link_buf||mdi_link_buf
+mti_link_data||mdi_link_data
+mti_key||mdi_key
+mti_name||mdi_name
+mti_oa||mdi_oa
+mti_pattr||mdi_pattr
+mti_range||mdi_range
+mti_spec||mdi_spec
+mti_tattr||mdi_tattr
+mti_tpattr||mdi_tpattr
+mti_xattr_buf||mdi_xattr_buf
+OS_STATE_DEGRADED||OS_STATFS_DEGRADED
+OS_STATE_READONLY||OS_STATFS_READONLY
+OS_STATE_NOPRECREATE||OS_STATFS_NOPRECREATE
+OS_STATE_ENOSPC||OS_STATFS_ENOSPC
+OS_STATE_ENOINO||OS_STATFS_ENOINO
+OS_STATE_SUM||OS_STATFS_SUM
+OS_STATE_NONROT||OS_STATFS_NONROT
+page_cache_get||get_page
+PAGE_CACHE_MASK||PAGE_MASK
+page_cache_release||put_page
+PAGE_CACHE_SHIFT||PAGE_SHIFT
+PAGE_CACHE_SIZE||PAGE_SIZE
+return seq_printf||seq_printf
+setup_timer||cfs_timer_setup
+= seq_printf||seq_printf
+sprintf||snprintf
+strcat||strncat
+strcpy||strncpy
+struct timeval||struct timespec64
+tempnam||mkstemp
+time_t||timeout_t
+timer_setup||cfs_timer_setup
+wait_queue_t||wait_queue_entry_t

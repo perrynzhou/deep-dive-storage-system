@@ -1,0 +1,151 @@
+#!/bin/bash
+#
+# $Id: lnet.rc bogl Exp $
+#
+### BEGIN INIT INFO
+# Provides:          lnet
+# Required-Start:    $network openibd
+# Required-Stop:     $network openibd
+# Default-Start:     3
+# Default-Stop:      0 1 2 5 6
+# Description:       Enable Lustre Networking
+### END INIT INFO
+#
+# lnet	This shell script takes care of starting and stopping
+#       the lnet (Lustre networking) services.
+#
+# chkconfig: - 59 76
+# description:  Part of the lustre file system.
+# probe: true
+# config: /etc/sysconfig/lnet
+
+# Source function library.
+[ -f /etc/rc.d/init.d/functions ] && . /etc/rc.d/init.d/functions
+
+# Source networking configuration and check that networking is up.
+[ -f /etc/sysconfig/network ] && . /etc/sysconfig/network && \
+[ "${NETWORKING}" = "no" ] && exit 0
+
+# Check for and source configuration file otherwise set defaults
+[ -f /etc/sysconfig/lnet ] && . /etc/sysconfig/lnet
+
+declare -r awkprog='BEGIN { rc = -1 }
+		       { if ( $1 == module_name ) { rc = $3; exit; } }
+		    END { print rc }'
+
+# Usage: run_preexec_check [ start | restart | condrestart ]
+# The single parameter will be passed to the PREEXEC_SCRIPT
+run_preexec_check ()
+{
+	if [ -n "$PREEXEC_CHECK" ] && ! $PREEXEC_CHECK ; then
+		echo "Pre-exec check \"$PREEXEC_CHECK\" failed.  Aborting."
+		exit 1
+	fi
+
+	if [ -n "$PREEXEC_SCRIPT" ] && ! "$PREEXEC_SCRIPT" "$1" ; then
+		echo "Pre-exec script \"$PREEXEC_SCRIPT\" failed.  Aborting."
+		exit 1
+	fi
+}
+
+# Usage: run_postexec_check [ start | restart | condrestart ]
+# The single parameter will be passed to the POSTEXEC_SCRIPT
+run_postexec_check ()
+{
+	if [ -n "$POSTEXEC_CHECK" ] && ! $POSTEXEC_CHECK ; then
+		echo "Post-exec check \"$POSTEXEC_CHECK\" failed.  Aborting."
+		exit 1
+	fi
+
+	if [ -n "$POSTEXEC_SCRIPT" ] && ! "$POSTEXEC_SCRIPT" "$1" ; then
+		echo "Post-exec script \"$POSTEXEC_SCRIPT\" failed.  Aborting."
+		exit 1
+	fi
+}
+
+status ()
+{
+	old_nullglob="`shopt -p nullglob`"
+	shopt -u nullglob
+
+	STATE="stopped"
+	# LSB compliance - return 3 if service is not running
+	# Lustre-specific returns
+	# 150 - partial startup
+	# 151 - health_check unhealthy
+	# 152 - LBUG
+	RETVAL=3
+	egrep -q "lnet" /proc/modules && STATE="loaded"
+
+	# check for any routes - on a portals router this is the only thing
+	VAR=$(lctl get_param -n routes 2>&1)
+	if [ $? = 0 ] ; then
+		STATE="running"
+		RETVAL=0
+	fi
+
+	# check if this is a router
+	if [[ "$(lctl get_param -n routes)" =~ "Routing enabled" ]]; then
+		STATE="running"
+		RETVAL=0
+	fi
+
+	# check for error in health_check
+	local health_check=$(lctl get_param -n health_check)
+	if [[ "$health_check" =~ "NOT HEALTHY" ]]; then
+		STATE="unhealthy"
+		RETVAL=1
+	fi
+
+	if [[ "$health_check" =~ "LBUG" ]]; then
+		STATE="LBUG"
+		RETVAL=152
+	fi
+
+	echo $STATE
+	eval $old_nullglob
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	run_preexec_check "start"
+	touch /var/lock/subsys/lnet
+	modprobe lnet || exit 1
+	lnetctl lnet configure || exit 1
+	lnetctl import < "@sysconfdir@/lnet.conf"
+	run_postexec_check "start"
+	;;
+  stop)
+	run_preexec_check "stop"
+	lustre_rmmod || exit 1
+	rm -f /var/lock/subsys/lnet
+	run_postexec_check "stop"
+	;;
+  status)
+	status
+	;;
+  restart)
+	$0 stop
+	$0 start
+	;;
+  reload)
+	touch /var/lock/subsys/lnet
+	;;
+  probe)
+	if [ ! -f /var/lock/subsys/lnet ] ; then
+	  echo $"start"; exit 0
+	fi
+	;;
+  condrestart)
+	[ -f /var/lock/subsys/lnet ] && {
+		$0 stop
+		$0 start
+	}
+	;;
+  *)
+	echo $"Usage: lnet {start|stop|status|restart|reload|condrestart}"
+	exit 1
+esac
+
+exit 0

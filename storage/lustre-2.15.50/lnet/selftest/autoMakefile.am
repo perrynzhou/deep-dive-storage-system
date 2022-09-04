@@ -1,0 +1,12 @@
+if MODULES
+
+if LINUX
+modulenet_DATA = lnet_selftest$(KMODEXT)
+endif # LINUX
+
+endif # MODULES
+
+EXTRA_DIST := $(lnet_selftest-objs:%.o=%.c)
+EXTRA_DIST += console.h conrpc.h rpc.h selftest.h timer.h
+
+MOSTLYCLEANFILES = @MOSTLYCLEANFILES@ selftest

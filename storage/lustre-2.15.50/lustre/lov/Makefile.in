@@ -1,0 +1,20 @@
+MODULES := lov
+lov-objs := lov_dev.o \
+	lov_ea.o \
+	lov_io.o \
+	lov_lock.o \
+	lov_merge.o \
+	lov_obd.o \
+	lov_object.o \
+	lov_offset.o \
+	lov_pack.o \
+	lov_page.o \
+	lov_pool.o \
+	lov_request.o \
+	lovsub_dev.o \
+	lovsub_object.o \
+	lproc_lov.o
+
+EXTRA_DIST = $(lov-objs:.o=.c) lov_internal.h lov_cl_internal.h
+
+@INCLUDE_RULES@

@@ -1,0 +1,11 @@
+if MODULES
+
+if LINUX
+modulenet_DATA = lnet$(KMODEXT)
+endif # LINUX
+
+endif # MODULES
+
+EXTRA_DIST := $(lnet-objs:%.o=%.c)
+
+MOSTLYCLEANFILES = @MOSTLYCLEANFILES@ lnet

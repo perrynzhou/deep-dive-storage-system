@@ -1,0 +1,145 @@
+# vim:expandtab:shiftwidth=4:softtabstop=4:tabstop=4:
+
+# increment this if you have made a change that should force a new kernel
+# to build built
+BUILD_GEN+=".2" #LU-3337 add missing build files for sles11sp2 server
+
+DEVEL_KERNEL_TYPE="default-devel"
+RPM_HELPERS_DIR="/usr/lib/rpm"
+RMAC=$HOME/.rpmmacros
+SUSE_MACROS=/etc/rpm/macros.kernel-source
+
+prepare_and_build_srpm() {
+
+    pushd $TOPDIR >/dev/null
+
+    # generate our buildid
+    local buildid="lustre${EXTRA_VERSION##*_lustre}"
+
+	# do release specific spec editing
+	edit_specs
+	mkdir -p config/$(basearch $TARGET_ARCH)
+	cp $CONFIG_FILE config/$(basearch $TARGET_ARCH)/$RPMSMPTYPE
+	tar cjf SOURCES/config.tar.bz2 config
+	rm -rf config
+
+    # do we need any special rpm build options
+    local rpmbuildopt="-bb"
+    if $DO_SRC; then
+        rpmbuildopt="-ba"
+    fi
+
+    # XXX - ignore the kabi changes.  need to figure out what this is really
+    #       all about.
+    touch SOURCES/IGNORE-KABI-BADNESS
+
+	# now build it
+	if ! rpmbuild $rpmbuildopt --target ${TARGET_ARCH} \
+		--define "_topdir $TOPDIR" \
+		$TOPDIR/SOURCES/kernel-$RPMSMPTYPE.spec 2>&1; then
+		fatal 1 "Failed to build kernel RPM"
+	fi
+
+    # for SLES, we also need to build the kernel-source rpm
+    if ! rpmbuild $rpmbuildopt $targets \
+                   --define "_topdir $TOPDIR" \
+                   $TOPDIR/SOURCES/kernel-source.spec 2>&1; then
+        fatal 1 "Failed to build kernel source RPM"
+    fi
+
+    # for SLES, we also need to build the kernel-syms rpm
+    if ! rpmbuild $rpmbuildopt $targets \
+                   --define "_topdir $TOPDIR" \
+                   $TOPDIR/SOURCES/kernel-syms.spec 2>&1; then
+        fatal 1 "Failed to build kernel syms RPM"
+    fi
+
+}
+
+devel_kernel_name() {
+    local lustre=${1:-false}
+
+    if $lustre; then
+        echo "kernel-lustre-$DEVEL_KERNEL_TYPE"
+    else
+        echo "kernel-$DEVEL_KERNEL_TYPE"
+    fi
+
+}
+
+rpm_BUILD_kernel_dirname() {
+    local rpmsmptype="$1"
+    local lnxmaj="$2"
+    local lnxmin="$3"
+    local arch="$4"
+
+    local lustre=""
+    if $KERNEL_LUSTRE_NAMING; then
+        $lustre="-lustre"
+    fi
+    echo kernel${lustre}-${rpmsmptype}-${lnxmaj}${lnxmin}/linux-${lnxmaj}
+}
+
+resolve_arch() {
+    local arch="$1"
+    # because we build an i686 kernel, we need to know if the arch we are
+    # resolving for is for the patched or patchless kernel (which is i586)
+    # we really should be building an i586 kernel to match what Novell does
+    local for_patchless=${2:-true}
+    local canonical=${3:-false}
+
+    case $arch in
+        ppc64)	arch=powerpc
+                ;;
+        i?86)	if $canonical; then
+                    arch=i386
+                elif $(eval $for_patchless); then
+                    arch=i586
+                fi
+                ;;
+    esac
+
+    echo "$arch"
+
+}
+
+find_linux_devel_paths() {
+	local path="$1"
+	local linuxobjpath=$path/usr/src/linux-${lnxmaj}${lnxmin}-${lnxrel}-obj/$(resolve_arch $TARGET_ARCH $PATCHLESS)/$RPMSMPTYPE
+
+	LINUX=$path/usr/src/linux-${lnxmaj}${lnxmin}-${lnxrel}
+	LINUXOBJ=$path/usr/src/linux-obj/$(resolve_arch $TARGET_ARCH $PATCHLESS)/$RPMSMPTYPE
+
+	# symlink the linux-obj to linux-version-obj
+	ln -s $linuxobjpath $LINUXOBJ
+	# We need to copy the headers from the source to the object tree for
+	# MOFED to be able to compile (a bug in ofed?)
+	if [ -e ${LINUX}/include ] && [ -e ${LINUXOBJ}/include ]; then
+		cp -rf ${LINUX}/include ${LINUXOBJ}
+	fi
+	# We modify %kernel_module_package macro to use the linux obj
+	# that lbuild install, not the OS installed /usr/src
+	sed -i -e "/^%kernel_module_package/,/^)}$/d" \
+	    -e "/^# A few cross-distro definitions/d" $RMAC
+	sed -e "s/\/usr\/src/${path//\//\\/}\/usr\/src/" \
+	    -e "s/\/boot/${path//\//\\/}\/boot/" ${SUSE_MACROS} >> $RMAC
+
+	return 0
+}
+
+mcpu_rpmbuild_opt() {
+
+    echo "--define \'jobs $(/usr/bin/getconf _NPROCESSORS_ONLN)\'"
+    return 0
+}
+
+# This function digs out the linux release from a linux-obj tree
+find_linux_release() {
+    _find_linux_release $LINUXOBJ
+}
+
+# cleanup the modified/added rpmmacros
+cleanup_rpmmacros() {
+	sed -i -e "/^%kernel_module_package/,/^)}$/d" \
+	    -e "/^# A few cross-distro definitions/d" $RMAC
+}

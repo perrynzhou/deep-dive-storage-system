@@ -1,0 +1,213 @@
+.TH LFS-SETDIRSTRIPE 1 2017-11-07 "Lustre" "Lustre Utilities"
+.SH NAME
+lfs setdirstripe, mkdir \- set striping pattern of a directory.
+.SH SYNOPSIS
+.B lfs setdirstripe [\fR-cdDhHioTxX\fR] \fIDIR\fR...
+.br
+.SH DESCRIPTION
+Create a striped directory with specified striping pattern. This
+.B lfs
+sub-command is similar to
+.BR "lfs setstripe" ,
+but is used to create a striped directory or set the default layout for
+subdirectories.
+Can also be used to create directory with a foreign (free format) striping pattern (see
+.BR --foreign
+and
+.BR --xattr
+options).
+.B lfs mkdir
+is an alias for this command.
+.SH OPTIONS
+.TP
+.BR \-c ", " \-T ", " \-\-mdt\-count =\fICOUNT\fR
+Stripe the new directory over
+.I COUNT
+MDTs.
+.TP
+.BR \-h ", " \-\-help
+Print usage message.
+.TP
+.BR \-i ", " \-\-mdt\-index =\fISTART_MDT_INDEX\fR[,\fIMDT_INDEX ...]
+Use the MDT whose index is
+.I START_MDT_INDEX
+as the master/starting MDT for the directory. If multiple
+.I MDT_INDEX
+values are given, then the stripes will be allocated on the specified
+MDT indices.  If
+.B -1
+(default) is used, the client will round-robin subdirectory creation
+across all MDTs if their free space is within
+.B lod.*.mdt_qos_threshold_rr
+percent of each other, otherwise the client will prefer to select
+.B COUNT
+MDT(s) proportional to the free space and inodes on each.
+.TP
+.BR \-H ", " \-\-mdt-hash =\fIHASH_TYPE\fR
+Use
+.I hash_type
+for the striped directory.
+.RS 1.2i
+.TP
+.B crush
+CRUSH hash algorithm.  This is a consistent hash
+algorithm, so minimum sub files need to relocate
+during directory restripe.
+.TP
+.B fnv_1a_64
+Fowler-Noll-Vo (FNV-1a) hash algorithm.  This provides
+reasonably uniform, but not cryptographically strong,
+hashing of the filename. (default)
+.TP
+.B all_char
+Sum of ASCII characters modulo number of MDTs. This
+provides weak hashing of the filename, and is suitable
+for only testing or when the input is known to have
+perfectly uniform distribution (e.g. sequential numbers).
+.RE
+.TP
+.BR \-d ", " \-\-delete
+Delete the default striping layout from the directory.  New subdirectories
+created in this directory will inherit the global default directory layout
+(by default they will not be striped).
+.TP
+.BR \-D ", " \-\-default
+Set the default striping pattern of subdirectories. Newly created
+sub-directories will use the new default striping pattern,
+but existing sub-directories will not be affected.  The newly
+created sub-directories will also inherit the specified default
+striping pattern.
+
+Note that striping all directories across all MDTs by default is
+.B not
+recommended at this time, as the clients will have to do more RPCs to
+create and access each directory, hurting performance rather than
+improving it.  Default striped directories are preferred only for
+parent directories where large subdirectories will be created
+(e.g. file-per-process job output directories).  Instead, using
+.B -c 1 -i -1
+on top-level directories balances mkdir therein over MDTs automatically
+without causing all subdirectories to be remote by default.
+.TP
+.BR \-o ", " \-\-mode =\fIMODE\fR
+Set the file access permissions of the new directory to the specified
+numeric
+.I MODE
+(typically octal), as with
+.BR chmod (1).
+It is not affected by the current
+.BR umask (1p).
+.TP
+.BR \-\-foreign[=type]
+Create a directory with a foreign (non-Lustre/free format, see
+.BR \-\-xattr
+option) striping. Where
+.BR type
+specifies a known foreign type (like
+.BR none
+,
+.BR symlink
+, ...) or a 32-bit numeric type.
+.TP
+.BR \-\-flags =\fI<hex>\fR
+Specify a numeric bitmask of type-specific layout flags for the foreign layout.
+.TP
+.BR \-x ", " \-\-xattr =\fISTRING\fR
+Specify a string to be used as a foreign (free format) striping.
+.TP
+.BR \-X ", " \-\-max-inherit = \fIMAX_INHERIT
+Set the inherit depth of default directory layout. If non-zero, then
+.I MAX_INHERIT
+is the number of subdirectory levels for which this default layout is inherited,
+up to a maximum of 250 levels, and is decremented by one when copying the
+default layout to each new subdirectory, until zero and the default layout is
+no longer copied. A
+.I MAX_INHERIT
+of -1 means the default layout is inherited for all subdirectories.
+.TP
+.BR \-\-max-inherit-rr = \fIMAX_INHERIT_RR
+Set the round-robin inherit depth of the default directory layout, only when
+.I START_MDT_INDEX
+is -1.  If
+.I MAX_INHERIT_RR
+is zero (unset), then new subdirectories are preferentially created on MDTs
+with more free space and inodes if the MDTs are imbalanced.  If non-zero, then
+.I MAX_INHERIT_RR
+is the number of subdirectory levels, up to a maximum of 250 levels, for which
+new subdirectories will be created in a round-robin manner across all available
+MDTs, rather than using MDT space balancing for new subdirectories.  Otherwise,
+.I MAX_INHERIT_RR
+is decremented by one when copying the default layout to each new subdirectory,
+until zero and round-robin is no longer used.  It may be useful to set
+.I MAX_INHERIT_RR
+to 2 or 3 when setting the default directory layout on the root of a
+.B new
+filesystem, so that top-level subdirectories are immediately spread
+across MDTs, rather than waiting for the MDTs to become imbalanced.
+Round-robin subdirectory creation is unlikely to be useful for existing
+filesystems that already have many files and imbalanced MDTs, since space
+balancing will already happen, and this will unnecessarily increase the number
+of remote subdirectories (increasing overhead) without any benefit.
+.SH NOTE
+.PP
+If neither
+.B -c
+or
+.B -i
+are specified,
+.B lfs mkdir
+will default to
+.B -c 1 -i -1
+and create the directory on an MDT that is less full than the others.
+.PP
+The
+.B lfs setdirstripe
+command is only usable by root unless the
+.B "mdt.*.enable_remote_dir_gid"
+is set on the MDS via
+.B lctl set_param
+to be either a non-zero numeric GID to limit it to a single group (e.g. the
+.BR "operator " or " admin"
+GID), or
+.B "-1"
+to allow any user/group to create remote directories.  By default, it is
+.B "0"
+to limit remote/striped directories to only the root user.
+
+The root directory of the file system is on MDT0000, and a filesystem-wide
+default directory layout is set on it by default:
+.B lfs setdirstripe -D -i -1 -c 1 --max-inherit -1 --max-inherit-rr 3
+, which is a space balanced directory layout, therefore new directories will be
+created on all MDTs by inode and space usage, and the top three level of new
+directories will be created in roundrobin mode if system is balanced.  If user
+doesn't want automatic space balance, deleting this default directory layout
+won't work, because it will be recreated if not set, instead user can run
+.B lfs setdirstripe -D -i -1 -c 1 --max-inherit 1 <mountpoint>
+to limit space balance in the top level, or run
+.B lfs setdirstripe -D -i 0 -c 1 --max-inherit 1 <mountpoint>
+to disable it.
+
+.SH EXAMPLES
+.TP
+.B $ lfs setdirstripe -c 2 -i 1 -H all_char /mnt/lustre/dir1
+This creates a directory striped on two MDTs, whose first stripe is on
+.B MDT0001
+(MDT index 1), and whose hash type is
+.BR all_char .
+.TP
+.B $ lfs mkdir --foreign=symlink --xattr PUUID/CUUID /mnt/lustre/dir1
+This creates
+.B dir1
+with foreign (non-lustre/free format)
+.B PUUID/CUUID
+striping/LMV EA value (symlink type).
+.SH AVAILABILITY
+The
+.B lfs setdirstripe
+command is part of the Lustre filesystem.
+.SH SEE ALSO
+.BR lctl (8),
+.BR lfs (1),
+.BR lfs-getdirstripe (1),
+.BR lfs-setstripe (1),
+.BR lustre (7)

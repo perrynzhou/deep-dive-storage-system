@@ -1,0 +1,172 @@
+src/backend/storage/file/README.encryption
+
+Transparent Cluster Encryption
+==============================
+
+When creating a new cluster (instance), user can choose to have his data
+encrypted on disk. If this feature is active, data is encrypted before it's
+written to disk and decrypted after it has been read. The data is always
+unencrypted in memory. The following characteristics should be considered by
+anyone who is interested in the feature:
+
+	1. The encryption is transparent from application's point of view.
+
+	2. A single key is used to encrypt the whole cluster.
+
+The full instance encryption feature helps to ensure data confidentiality,
+especially when user cannot rely on confidentiality at filesystem level. On
+the other hand, it does not ensure data integrity, i.e. it does not help to
+detect whether an adversary wrote his cipher data to the disk. The ciphers
+used here do not protect data integrity: we encrypt one pages (typically of
+size 8 kB) at a time, so the attacker can replace the whole page. However if
+the attacker only changes part of the page, this can be detected if data
+checksums feature is enabled. And specifically for WAL, each WAL record has
+its own checksum.
+
+Relations
+---------
+
+AES cipher in CTR mode [2] is used to encrypt relation files, one relation
+block (page) at a time. Since CTR is effectively a stream cipher, we can
+consider each page to be a separate stream.
+
+One particular advantage of the CTR mode is that initialization vector (IV) of
+given encryption blocks can be determined independently from other blocks, so
+both encryption and decryption of a single page can be performed by multiple
+CPUs in parallel.
+
+Page LSN is stored unencrypted, see the section on initialization vector
+(tweak) below.
+
+Page checksum is also unencrypted so that it can be computed after encryption,
+right before the page is written to disk.
+
+WAL
+---
+
+The specific problem of WAL is that record must not be changed once it has
+been flushed to disk. However if we used a block cipher, and if a new WAL
+record started in the same encryption block in which the previous record ends,
+that encryption block would become completely different after the next run of
+encryption of the containing page. Torn write of such a block (e.g. if page
+boundary crosses the encryption block) is likely to make decryption produce
+garbage, which will also appear in the already-flushed record.
+
+Therefore we encrypt WAL using a stream cipher, or rather block cipher in
+stream mode of operation. Stream cipher uses XOR operation to combine a "key
+stream" with the input stream, and it does not matter if the length of the
+input stream is aligned to any value. In particular, the CTR mode [2] was
+chosen because it allows for both read and write operations to be performed by
+multiple CPUs.
+
+The WAL is encrypted / decrypted one WAL page (typically 8 kB) at a time, so
+rather than a single stream, the encrypted WAL is actually a sequence of
+per-page streams.
+
+Since stream ciphers are susceptible to "reused key attack" [4], we must
+ensure that the unused part of the last WAL page (filled with zeroes) is
+never encrypted.
+
+Temporary files
+---------------
+
+BufFileWrite() and BufFileRead() functions (see buffile.c) hide the encryption
+/ decryption from caller. The encryption / decryption processes one buffer at
+a time so that the buffers can be retrieved independent from each other.
+
+If the encryption is enabled, the following requirements need to be taken into
+account:
+
+1. The file buffer cannot be positioned at arbitrary offset of the file. If
+the encryption routine starts at some position of the file, decryption must
+not start elsewhere because there's no way to determine which initialization
+vector was used internally for the corresponding encryption blocks during
+encryption. It makes sense to position the buffer at file offset, that is
+whole multiple of buffer size.
+
+2. Since temporary file or its part can be rewritten, we either need to derive
+a new IV for each write or to avoid using stream cipher (see [4]). The earlier
+is difficult because both temporary files and "auxiliary files" are
+implemented in the same module buffile.c (in order to eliminate code
+duplication) and because it's hard to generate an unique IV for each write
+into auxiliary file, see explanation below. Therefore we use the AES-CBC
+cipher [3] for temporary files.
+
+3. In general, the useful (written) data does not fill whole multiple of
+encryption blocks, but we must write the whole blocks for decryption to
+succeed (this is because we use block cipher, as explained above). That
+implies that we need to fill the unused part of the last block with zeroes and
+also remember the amount of useful bytes in the segment file.  (In fact we
+align the segment file size to file buffers instead of encryption blocks,
+which makes the implementation simpler.)
+
+Auxiliary files
+---------------
+
+To store other kinds of data encrypted than the ones above, developers are
+advised to use BufFileWriteTransient() and BufFileReadTransient() functions
+(also located in buffile.c). These are especially useful if some data
+structure should be written to an encrypted file and user does not want to
+care about encryption specific details.
+
+Since these files can be closed and reopened again, we need to derive the
+tweak w/o using any in-memory metadata - such metadata is essentially lost
+when the file is closed. If we stored any kind of metadata into the file, it'd
+make the implementation rather tricky. Howver w/o storing the metadata, we
+cannot easily derive a new tweak if some block gets rewritten. Therefore we
+use the AES-CBC cipher for auxiliary files: unlike stream cipher, this cipher
+is not vulnerable to "reused key attack" [4].
+
+Serialization of data changes during logical decoding (reorderbuffer.c) is the
+typical use case for this API. Another use case is encryption of statistics
+(pgstat.c).
+
+Initialization vector (IV), encryption tweak
+--------------------------------------------
+
+Besides the input data and the key, both block and stream cipher used for the
+postgres cluster encryption require an initialization vector. It should make
+analysis of the encrypted data more difficult. Also according to [1], the same
+data should be encrypted differently if located elsewhere on the disk. Term
+"encryption tweak" is more common in the context of disk encryption.
+
+When encrypting relations, each encryption unit (i.e. page) has an unique
+tweak, which consists of page LSN and block number. Since the tweak is needed
+for decryption, we leave the LSN unencrypted.
+
+WAL encryption tweak consists of timeline, segment number and offset at which
+the WAL page starts in the segment. The "reencryption" takes place when WAL
+page is copied from one timeline to another, typicially at the end of
+recovery.
+
+As for temporary files, PID of the owning backend, file / fileset number and
+block number (where block is of the same size as a relation page) within the
+file provide sufficient uniqueness, so we use these to generate the tweak.
+
+Auxiliary files can be used for different purposes, so each caller is
+responsible for the tweak initialization. See the source code for details.
+
+Replication
+-----------
+
+During streaming replication, the walsender process sends the WAL encrypted
+and walreceiver just writes it. Decryption is performed before the slave
+cluster tries to apply the changes. That implies that the same encryption key
+must be used both master and slave.
+
+As for logical replication, the only change introduced by this feature is that
+the WAL has to be decrypted before the contained data changes can be
+decoded. The data changes are transferred to the subscribing database /
+cluster unencrypted, so both master and slave can use different encryption
+keys.
+
+References
+----------
+
+[1] https://en.wikipedia.org/wiki/Disk_encryption_theory
+
+[2] https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)
+
+[3] https://en.wikipedia.org/wiki/Disk_encryption_theory#Cipher-block_chaining_(CBC)
+
+[4] https://en.wikipedia.org/wiki/Stream_cipher_attacks#Reused_key_attack

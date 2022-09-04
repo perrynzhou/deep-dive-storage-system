@@ -1,0 +1,12 @@
+if MODULES
+
+if LINUX
+modulefs_DATA = obdclass$(KMODEXT)
+if TESTS
+modulefs_DATA += llog_test$(KMODEXT)
+endif # TESTS
+endif # LINUX
+
+endif # MODULES
+
+MOSTLYCLEANFILES := @MOSTLYCLEANFILES@

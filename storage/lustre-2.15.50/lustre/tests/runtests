@@ -1,0 +1,153 @@
+#!/bin/bash
+#
+# Script which does some basic tests to ensure we haven't regressed.
+
+LUSTRE=${LUSTRE:-$(dirname $0)/..}
+. $LUSTRE/tests/test-framework.sh
+init_test_env $@
+init_logging
+
+RUNTESTS_SRC=${RUNTESTS_SRC:-"/etc /bin"}
+[ "$COUNT" ] || COUNT=10000
+[ "$SLOW" = "no" ] && COUNT=1000
+
+[ "$MKDIRMANY" ] || MKDIRMANY="createmany -d"
+[ "$STATMANY" ] || STATMANY="statmany -s"
+[ "$RMDIRMANY" ] || RMDIRMANY="unlinkmany -d"
+
+check_and_setup_lustre
+
+test_1() {
+	sleep 5 # let MDS refresh aggregated statfs
+	# Include some extra space for the status file
+
+	echo "usage before starting test"
+	$LFS df
+	$LFS df -i
+	local dfused=$(df -P $DIR | awk '{ print $3 }' | tail -n 1)
+	local truncsize=123
+
+	# let's start slowly here...
+	local stime=$(date +%s)
+	log "touching $DIR at $(date) (@$stime)"
+	touch $DIR || error "can't touch $DIR"
+	local hfile=$DIR/hosts.$$
+
+	if [ $COUNT -gt 10 -o $COUNT -eq 0 ]; then
+		# this will cause the following cp to trigger bug #620096
+		log "create an empty file $hfile"
+		mcreate $hfile
+		log "copying /etc/hosts to $hfile"
+		cp /etc/hosts $hfile || error "can't cp /etc/hosts to $hfile"
+		log "comparing /etc/hosts and $hfile"
+		diff -u /etc/hosts $hfile || error "$hfile different"
+		log "renaming $hfile to $hfile.ren"
+		mv $hfile $hfile.ren ||
+			error "can't rename $hfile to $hfile.ren"
+		log "copying /etc/hosts to $hfile again"
+		cp /etc/hosts $hfile ||
+			error "can't cp /etc/hosts to $hfile again"
+		log "truncating $hfile"
+		> $hfile || error "can't truncate $hfile"
+		log "removing $hfile"
+		rm $hfile || error "can't remove $hfile"
+		log "copying /etc/hosts to $hfile.2"
+		cp /etc/hosts $hfile.2 ||
+			error "can't cp /etc/hosts to $hfile.2"
+		log "truncating $hfile.2 to $truncsize bytes"
+		$TRUNCATE $hfile.2 $truncsize || error "can't truncate $hfile.2"
+		checkstat -s $truncsize $hfile.2 ||
+			error "$hfile.2 isn't $truncsize bytes"
+	fi
+
+	local dst=$DIR/$tdir
+	log "creating $dst"
+	test_mkdir -p $dst || error "can't mkdir $dst"
+
+	# let's do a little more, with files that haven't changed in the
+	# last day (hopefully they don't change during test)
+	local findfiles=$TMP/runtests.files
+
+	# use "NUL" instead of newline as filename terminator, bug 19702
+	find $RUNTESTS_SRC -type f -mtime +1 | head -n $COUNT | \
+	      tr '\n' '\0' > $findfiles
+	[ -s "$findfiles" ] ||
+		error "$RUNTESTS_SRC contains only files modifed less than " \
+		      "2 days ago"
+	stack_trap "rm -f $findfiles"
+	COUNT=$(xargs -0 -n 1 echo < $findfiles | wc -l)
+
+	log "copying $COUNT files from $RUNTESTS_SRC to $dst$RUNTESTS_SRC " \
+	    "at $(date)"
+	tar cf - --null --files-from $findfiles | \
+		tar xvf - -C $dst > /dev/null || error "copying $RUNTESTS_SRC"
+
+	log "comparing $COUNT newly copied files at $(date)"
+
+	cat $findfiles | tr "\0" "\n" | ( rc=0; while read f; do
+		diff -q "$f" "$dst/$f" || rc=18
+	done
+	[ "$rc" = 0 ] || error_exit "old and new files are different: rc=$rc" )
+
+	# mkdirmany test (bug 589)
+	log "running $MKDIRMANY $dst/d $COUNT"
+	$MKDIRMANY $dst/d $COUNT || error "$MKDIRMANY failed"
+	log "finished at $(date) ($(($(date +%s) - stime)))"
+
+	stopall || error "stopall failed"
+	setupall || error "setupall failed"
+
+	log "comparing $COUNT previously copied files"
+	cat $findfiles | tr "\0" "\n" | ( rc=0; while read f; do
+		diff -q "$f" "$dst/$f" || rc=22
+	done
+	[ "$rc" = 0 ] || error_exit "old and new files are different: rc=$rc" )
+
+	log "running $STATMANY $dst/d $COUNT $((COUNT * 2))"
+	$STATMANY $dst/d $COUNT $((COUNT * 2)) ||
+		error "$STATMANY $dst/d failed"
+	echo "usage after creating all files"
+	$LFS df
+	$LFS df -i
+	stopall || error "stopall failed (2)"
+	setupall || error "setupall failed (2)"
+
+	log "running $RMDIRMANY $dst/d $COUNT"
+	$RMDIRMANY $dst/d $COUNT || error "$RMDIRMANY cleanup failed"
+
+	log "removing $dst"
+	rm -r $dst || error "can't remove $dst"
+
+	if [ $COUNT -gt 10 -o $COUNT -eq 0 ]; then
+		log "renaming $hfile.ren to $hfile"
+		mv $hfile.ren $hfile ||
+			error "can't rename $hfile.ren to $hfile"
+		log "truncating $hfile"
+		> $hfile || error "can't truncate $hfile"
+		log "removing $hfile"
+		rm $hfile || error "can't remove $hfile again"
+		log "verifying $hfile.2 is $truncsize bytes"
+		checkstat -s $truncsize $hfile.2 ||
+			error "$hfile.2 isn't $truncsize bytes"
+		rm $hfile.2 || error "can't remove $hfile.2"
+	fi
+
+	log "done"
+
+	wait_delete_completed
+	sleep 5 # let MDS refresh aggregated statfs
+	echo "usage after removing all files"
+	$LFS df
+	$LFS df -i
+	local nowdfused=$(($(df -P $DIR | awk '{ print $3 }' | tail -n 1)))
+	if [ $(expr $nowdfused - $dfused) -gt $(fs_log_size) ]; then
+		error "Space not all freed: now ${nowdfused}kB, was ${dfused}kB"
+	else
+		log "Space was freed: now ${nowdfused}kB, was ${dfused}kB."
+	fi
+}
+run_test 1 "All Runtests"
+
+complete $SECONDS
+check_and_cleanup_lustre
+exit_status

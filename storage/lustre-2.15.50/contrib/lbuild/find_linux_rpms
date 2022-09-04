@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# this is an alternative FD for stdout, to be used especially when we are
+# taking stdout from a function as it's return value.  i.e. foo=$(bar)
+# this is a workaround until a version of bash where we can put xtrace
+# on a specific FD
+#exec 3>&1; STDOUT=3
+STDOUT=2
+
+# Assume that lbuild's support files can be found in the same
+# canonicalized path as this very script.
+THIS_SCRIPT=$(readlink -f ${0})
+LBUILD_DIR=${LBUILD_DIR:-$(dirname ${THIS_SCRIPT})}
+
+. $LBUILD_DIR/funcs.sh
+
+TOPDIR=$PWD
+
+# same as lbuild's --kernelrpm switch
+KERNELRPMSDIR="$1"
+
+DISTRO=$(autodetect_distro)
+# remove separator
+DISTRO=${DISTRO/-/}
+DISTROMAJ=${DISTRO%%.*}
+
+if [ -f $LBUILD_DIR/lbuild-$DISTRO ]; then
+    . $LBUILD_DIR/lbuild-$DISTRO
+else
+    . $LBUILD_DIR/lbuild-$DISTROMAJ
+fi
+
+TARGET_ARCH="$(uname -m)"
+TARGET_ARCHS="$(uname -m)"
+TARGET_ARCHS_ALL="$(uname -m)"
+
+# need lnxmaj from the target file
+TARGET=$(autodetect_target "$DISTRO")
+TARGET_FILE="$TOPDIR/lustre/kernel_patches/targets/$TARGET.target"
+. "$TARGET_FILE"
+
+if ! kernelrpm=$(find_linux_rpms "-$DEVEL_KERNEL_TYPE" "$KERNELRPMSDIR"); then
+    fatal 1 "Could not find the kernel-$DEVEL_KERNEL_TYPE RPM in ${KERNELRPMSDIR}"
+fi
+
+echo "$kernelrpm"
