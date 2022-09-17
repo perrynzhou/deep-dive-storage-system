@@ -2,7 +2,25 @@
  ## deep-dive-storage-in-china
 
 
- ###  目标和愿景
+ ## 技术分享计划
+
+### perrynzhou技术分享
+
+|  主题   | 时间  | 文档  |
+|  ----  | ----  |----  |
+| 深入浅出Lustre Distributed Namespace特性  | 20220919 |https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/lustre |
+
+
+### Zhongyl1994技术分享
+|  主题   | 时间  | 文档  |
+|  ----  | ----  |----  |
+| todo  | todo |todo|
+
+
+
+
+
+ ###  存储系统介绍
 ![](./deep-dive-storage-in-china.png)
 
 
