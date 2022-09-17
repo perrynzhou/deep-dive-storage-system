@@ -6,9 +6,14 @@
 ![](./deep-dive-storage-in-china.png)
 
 
- ## 技术分享计划
-#### [perrynzhou技术分享](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou)
-#### [Zhongyl1994技术分享](https://github.com/perrynzhou/deep-dive-storage-in-china)
+
+## 分享计划
+#### [perrynzhou-分享计划](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/technical-sharing-meetings/perrynzhou)
+#### [Zhongyl1994-分享计划](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/technical-sharing-meetings/zhongyl1994)
+
+ ## 技术文档
+#### [perrynzhou-技术文档](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou)
+#### [Zhongyl1994-技术文档](https://github.com/perrynzhou/deep-dive-storage-in-china)
 
 ## 交流渠道
 
