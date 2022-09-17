@@ -15,7 +15,6 @@
 
 ```shell
 [deep-dive-storage-in-china/slideshare]$ tree -L 3 ./
-./
 //  社区维护者文档目录名称
 -- perrynzhou
     // lustre 相关文档
@@ -30,3 +29,6 @@
 ## 交流渠道
 
 ![](./comminicate-group.jpg)
+
+
+
