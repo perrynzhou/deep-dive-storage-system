@@ -1,15 +1,22 @@
 ## perrynzhou技术分享
 
-![](../../comminicate-group.jpg)
 
-#### [Lustre分布式文件存储](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/lustre)
+### 分享计划
+|  时间   | 主题  |
+|  ----  | ----  |
+| 2022/09/19  | 深入浅出Lustre  Distributed Namespace特性 |
+| 2022/09/24  | 内核调试环境构建 |
 
-#### [postgres数据库](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/postgres)
+
+### 技术文档
+- [Lustre分布式文件存储](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/lustre)
+
+- [postgres数据库](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/postgres)
 
 
-#### [zfs文件存储](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/zfs)
+- [zfs文件存储](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/zfs)
 
-#### [wiredtiger存储引擎](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/wiredtiger)
+- [wiredtiger存储引擎](https://github.com/perrynzhou/deep-dive-storage-in-china/tree/master/slideshare/perrynzhou/wiredtiger)
 
 
 
